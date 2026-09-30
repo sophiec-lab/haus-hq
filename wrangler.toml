@@ -1,0 +1,14 @@
+name = "haus-hq"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false
+
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
+fallthrough = false
