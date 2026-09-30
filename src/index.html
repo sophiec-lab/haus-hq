@@ -174,6 +174,16 @@ h2.sec .aside{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:
 .spendtbl tfoot td{border-top:2px solid var(--border)}
 .spendtbl tr.spendsec td{background:var(--surface-2,rgba(0,0,0,.04));font-size:12px;letter-spacing:.04em;text-transform:uppercase}
 @media (max-width:520px){.spendgrid{grid-template-columns:1fr}}
+.docgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px}
+.doccard{border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow);padding:12px 14px}
+.doccard.docwarn{border-color:var(--flare)}
+.dochead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:4px}
+.dochead h3{margin:0;font-size:16px}
+.docrow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border)}
+.docrow:last-child{border-bottom:0}
+.linkbtn{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+@media (max-width:520px){.docgrid{grid-template-columns:1fr}}
 .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}
 table{border-collapse:collapse;width:100%;min-width:560px}
 th{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
@@ -1162,7 +1172,7 @@ function renderTabs(){
     if(t.k==="deadlines"){ const n=(D.comp||[]).filter(c=>c.status==="open"&&c.due_date&&dAway(c.due_date)<=7).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="finance"){ const n=(D.invoices||[]).filter(i=>Number(i.amount_due)>0).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="leadership"){ const n=(D.leadership||[]).filter(i=>i.status==="open"&&(i.urgency==="now")).length; if(n) b=`<span class="badge">${n}</span>`; }
-    if(t.k==="docs"){ const n=(D.docs||[]).filter(x=>x.status!=="filed").length; if(n) b=`<span class="badge">${n}</span>`; }
+    if(t.k==="docs"){ const n=(D.docs||[]).filter(x=>x.status==="action").length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="data"){ const n=(D.issuesData||[]).filter(i=>!i.resolved&&i.severity==="blocking").length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="orders"){ const n=(D.orders||[]).filter(p=>(p.auto_created&&!p.reviewed_at&&p.xero_state!=="sent"&&p.stage!=="cancelled")||p.stage==="variance"||((p.stage==="receipt"||p.stage==="waiting")&&Number(p.days_without_receipt)>=3)).length+(D.poReceipts||[]).filter(r=>!r.po_id&&!r.dismissed).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="cost"){ const m=isoLocal(new Date(TODAY.getFullYear(),TODAY.getMonth(),1)); const n=(D.payroll||[]).filter(x=>x.month_start===m&&(x.run_section==="chase"||(x.invoice_id&&(x.approval_status==="pending"||x.approval_status==="on_hold")))).length; if(n) b=`<span class="badge">${n}</span>`; }
@@ -2696,41 +2706,46 @@ document.addEventListener("change", async e=>{
   const files = Array.from(i.files||[]); i.value = "";
   await uploadDocs(files, i.dataset.upload, i.dataset.bill||null, i.dataset.billName||null);
 });
+const DOC_SECTIONS=[
+  ["company","Company","Incorporation, Companies House, office"],
+  ["tax","Tax & VAT","HMRC, VAT, corporation tax"],
+  ["accounts","Accounts","Year-end accounts and accountant papers"],
+  ["clients","Client contracts","Who HAUS works for"],
+  ["events","Venue & event contracts","Venues, hotels, event agreements"],
+  ["team","Team contracts & NDAs","Freelancers and staff"],
+  ["insurance","Insurance","Policies and certificates"],
+  ["bank","Bank & finance","Bank letters, payment agreements"],
+  ["legal","Legal & trademarks","Solicitors, trademarks, NDAs"]
+];
 function vDocs(){
   if(!canMoney()) return noAccess("Documents are limited to owner and leadership accounts.");
-  const all = (D.docs||[]).slice().sort((a,b)=> (b.doc_date||"").localeCompare(a.doc_date||"") || (b.created_at||"").localeCompare(a.created_at||""));
-  const F = {
-    to_file:{t:"To file", f:x=>x.status==="to_file"},
-    action: {t:"Needs action", f:x=>x.status==="action"},
-    filed:  {t:"Filed", f:x=>x.status==="filed"},
-    all:    {t:"All", f:x=>true}
-  };
-  if(!DOCF || !F[DOCF]) DOCF = all.some(F.action.f) ? "action" : all.some(F.to_file.f) ? "to_file" : "all";
   const q = DOCQ.trim().toLowerCase();
-  const list = all.filter(F[DOCF].f).filter(x=>!q || [x.title,x.from_party,x.kind,x.project_name,x.notes,x.file_name].join(" ").toLowerCase().includes(q));
-
-  let h = `<h2 class="sec">Documents <span class="aside">${all.length} stored</span></h2>`;
-  h += `<p class="hint">One place for the paperwork that matters: contracts, letters that arrive in the post, statements, insurance, tax. Upload a file or take a photo of a letter on your phone; it lands under <b>To file</b> so you can name it, tag the project and say whether it needs anything doing. Anything with an action date also shows in What is coming on the Overview. Files are private to owner and leadership accounts.</p>`;
+  const all = (D.docs||[]).slice().sort((a,b)=> (b.doc_date||"").localeCompare(a.doc_date||"") || (b.created_at||"").localeCompare(a.created_at||""));
+  const match = x=>!q || [x.title,x.from_party,x.kind,x.project_name,x.notes,x.file_name,x.person_name].join(" ").toLowerCase().includes(q);
+  const known = new Set(DOC_SECTIONS.map(s=>s[0]));
+  const action = all.filter(x=>x.status==="action").filter(match);
+  const unsorted = all.filter(x=>x.status!=="action" && (!known.has(x.section) || x.status==="to_file")).filter(match);
+  const row = x=>`<div class="docrow">
+      <div class="docmain">${x.storage_path||x.external_url?`<button type="button" class="linkbtn" data-act="doc-open" data-id="${x.id}"><b>${esc(x.title)}</b></button>`:`<b>${esc(x.title)}</b>`}
+        <div class="tiny faint">${x.doc_date?d(x.doc_date):"no date"}${x.from_party?" &middot; "+esc(x.from_party):""}${x.project_name?" &middot; "+esc(x.project_name):""}${x.person_name?" &middot; "+esc(x.person_name):""}</div>
+        ${x.status==="action"&&(x.action_note||x.action_due)?`<div class="tiny" style="color:var(--flare)">${esc(x.action_note||"")}${x.action_due?" by "+dshort(x.action_due):""}</div>`:""}</div>
+      <button class="btn small" data-act="doc-edit" data-id="${x.id}">Edit</button></div>`;
+  let h = `<h2 class="sec">Key documents <span class="aside">${all.length} filed</span></h2>`;
   h += `<div class="actions">
     <label class="btn primary" style="cursor:pointer">Upload files<input type="file" data-upload="upload" multiple accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.txt,.eml" hidden></label>
     <label class="btn primary" style="cursor:pointer">Photograph a letter<input type="file" data-upload="photo" accept="image/*" capture="environment" hidden></label>
     <button class="btn" data-act="doc-link">Add a link</button>
+    <input class="i" id="docSearch" placeholder="Find a document: VAT, Scalers, insurance…" value="${esc(DOCQ)}" style="max-width:320px;padding:4px 8px">
   </div>`;
-  h += `<div class="actions">` + Object.entries(F).map(([k,v])=>`<button class="btn small ${DOCF===k?"primary":""}" data-act="doc-filter" data-f="${k}">${esc(v.t)} (${all.filter(v.f).length})</button>`).join("")
-    + `<input class="i" id="docSearch" placeholder="Search title, sender, project" value="${esc(DOCQ)}" style="max-width:260px;padding:4px 8px"></div>`;
-  h += list.length ? `<div class="tablewrap" style="margin-top:12px"><table>
-    <thead><tr><th>Date</th><th>Document</th><th>Kind</th><th>Project</th><th>Status</th><th></th></tr></thead><tbody>`
-    + list.map(x=>`<tr>
-      <td class="num tiny" style="white-space:nowrap">${x.doc_date?d(x.doc_date):"&mdash;"}</td>
-      <td><b>${esc(x.title)}</b>${x.from_party?`<div class="tiny faint">from ${esc(x.from_party)}</div>`:""}
-        ${x.notes?`<div class="tiny muted">${esc(x.notes)}</div>`:""}
-        <div class="tiny faint">${esc(x.received_via)}${x.file_name?" &middot; "+esc(x.file_name):""}${x.uploaded_by?" &middot; added by "+esc(String(x.uploaded_by).split("@")[0]):""}</div></td>
-      <td><span class="chip">${esc(x.kind)}</span></td>
-      <td class="small muted">${esc(x.project_name||"")}</td>
-      <td>${docStatusChip(x.status)}${x.status==="action"&&(x.action_note||x.action_due)?`<div class="tiny" style="color:var(--flare)">${esc(x.action_note||"")}${x.action_due?" by "+dshort(x.action_due):""}</div>`:""}</td>
-      <td style="white-space:nowrap">${x.storage_path||x.external_url?`<button class="btn small" data-act="doc-open" data-id="${x.id}">Open</button> `:""}<button class="btn small" data-act="doc-edit" data-id="${x.id}">Edit</button></td>
-    </tr>`).join("") + `</tbody></table></div>`
-    : `<div class="rows" style="margin-top:12px"><div class="empty">${all.length?"Nothing in this view.":"No documents yet. Upload one or photograph a letter to start."}</div></div>`;
+  if(action.length) h += `<div class="doccard docwarn" style="margin-top:14px"><div class="dochead"><h3>Needs action</h3><span class="tiny faint">${action.length}</span></div>${action.map(row).join("")}</div>`;
+  if(unsorted.length) h += `<div class="doccard" style="margin-top:14px"><div class="dochead"><h3>To sort</h3><span class="tiny faint">new or not yet in a section: click Edit and pick one</span></div>${unsorted.map(row).join("")}</div>`;
+  h += `<div class="docgrid">` + DOC_SECTIONS.map(([k,t,sub])=>{
+    const list = all.filter(x=>x.section===k && x.status==="filed").filter(match);
+    if(q && !list.length) return "";
+    return `<div class="doccard"><div class="dochead"><h3>${esc(t)}</h3><span class="tiny faint">${esc(sub)} &middot; ${list.length}</span></div>`
+      + (list.length ? list.map(row).join("") : `<div class="empty">Nothing filed here yet.</div>`) + `</div>`;
+  }).join("") + `</div>`;
+  if(q && !action.length && !unsorted.length && !all.filter(x=>known.has(x.section)&&x.status==="filed").some(match)) h += `<div class="rows" style="margin-top:12px"><div class="empty">Nothing matches &ldquo;${esc(DOCQ)}&rdquo;.</div></div>`;
   return h;
 }
 document.addEventListener("input", e=>{
@@ -2759,6 +2774,7 @@ async function docForm(id){
     <form id="dform">
       <label class="f"><span>Title</span><input class="i" name="title" required value="${f("title")}"></label>
       <div class="frow">
+        <label class="f"><span>Section</span><select class="i" name="section"><option value="">To sort</option>${DOC_SECTIONS.map(([k,t])=>`<option value="${k}" ${x.section===k?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
         <label class="f"><span>Kind</span><select class="i" name="kind">${opt(DOC_KINDS,x.kind)}</select></label>
         <label class="f"><span>Date on the document</span><input class="i" type="date" name="doc_date" value="${f("doc_date")}"></label>
       </div>
@@ -2795,6 +2811,7 @@ async function docForm(id){
       p_action_note:g("action_note"), p_action_due:g("action_due"), p_notes:g("notes"), p_bill_key:g("bill_key") });
     if(error){ toast(error.message); return; }
     if((savedId||id) && (g("person_id") || x.person_id)) await sb.rpc("haus_doc_person",{p_id:savedId||id, p_person:g("person_id")});
+    if((savedId||id) && (g("section")||"") !== (x.section||"")) await sb.rpc("haus_doc_section",{p_id:savedId||id, p_section:g("section")||""});
     closeDrawer(); await loadAll(); render(); renderTabs(); toast("Saved");
   });
 }
