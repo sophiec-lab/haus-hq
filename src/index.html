@@ -181,6 +181,8 @@ h2.sec .aside{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:
 .dochead h3{margin:0;font-size:16px}
 .docrow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border)}
 .docrow:last-child{border-bottom:0}
+.docbtns{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.doccomment{margin-top:4px;padding:4px 8px;border-left:3px solid var(--border);background:var(--surface-alt,rgba(0,0,0,.03))}
 .linkbtn{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
 .linkbtn:hover{text-decoration:underline}
 @media (max-width:520px){.docgrid{grid-template-columns:1fr}}
@@ -2728,8 +2730,9 @@ function vDocs(){
   const row = x=>`<div class="docrow">
       <div class="docmain">${x.storage_path||x.external_url?`<button type="button" class="linkbtn" data-act="doc-open" data-id="${x.id}"><b>${esc(x.title)}</b></button>`:`<b>${esc(x.title)}</b>`}
         <div class="tiny faint">${x.doc_date?d(x.doc_date):"no date"}${x.from_party?" &middot; "+esc(x.from_party):""}${x.project_name?" &middot; "+esc(x.project_name):""}${x.person_name?" &middot; "+esc(x.person_name):""}</div>
-        ${x.status==="action"&&(x.action_note||x.action_due)?`<div class="tiny" style="color:var(--flare)">${esc(x.action_note||"")}${x.action_due?" by "+dshort(x.action_due):""}</div>`:""}</div>
-      <button class="btn small" data-act="doc-edit" data-id="${x.id}">Edit</button></div>`;
+        ${x.status==="action"&&(x.action_note||x.action_due)?`<div class="tiny" style="color:var(--flare)">${esc(x.action_note||"")}${x.action_due?" by "+dshort(x.action_due):""}</div>`:""}
+        ${x.comment?`<div class="small doccomment">${esc(x.comment)}</div>`:""}</div>
+      <div class="docbtns">${x.status!=="filed"?`<button class="btn small primary" data-act="doc-done" data-id="${x.id}">${x.status==="action"?"Done, file it":"File it"}</button>`:""}<button class="btn small" data-act="doc-note" data-id="${x.id}">${x.comment?"Edit note":"Note"}</button><button class="btn small" data-act="doc-edit" data-id="${x.id}">Edit</button></div></div>`;
   let h = `<h2 class="sec">Key documents <span class="aside">${all.length} filed</span></h2>`;
   h += `<div class="actions">
     <label class="btn primary" style="cursor:pointer">Upload files<input type="file" data-upload="upload" multiple accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.txt,.eml" hidden></label>
@@ -4915,6 +4918,16 @@ document.addEventListener("click", async e=>{
       break;
     }
     case "doc-open": await openDoc(id); break;
+    case "doc-done": {
+      const x=(D.docs||[]).find(r=>r.id===id); if(!x) break;
+      if(!x.section){ toast("Pick a section first: click Edit and choose one."); break; }
+      await rpc("haus_doc_quick",{p_id:id,p_status:"filed",p_comment:null},"Filed under "+((DOC_SECTIONS.find(s=>s[0]===x.section)||[])[1]||"its section")); break;
+    }
+    case "doc-note": {
+      const x=(D.docs||[]).find(r=>r.id===id); if(!x) break;
+      const fr=await formAsk("Note on "+x.title,[{k:"c",label:"Note",type:"textarea",required:false,value:x.comment||"",hint:"Shows under the document. Leave empty to remove it."}],"Save note");
+      if(fr) await rpc("haus_doc_quick",{p_id:id,p_status:null,p_comment:fr.c||""},"Note saved"); break;
+    }
     case "doc-edit": docForm(id); break;
     case "doc-link": docForm(null); break;
     case "doc-del": {
