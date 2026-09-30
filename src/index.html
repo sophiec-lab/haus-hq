@@ -168,6 +168,11 @@ h2.sec .aside{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:
 .empty{padding:16px 14px;color:var(--ink-faint);font-size:13px;font-style:italic}
 
 /* table */
+.spendgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-top:16px}
+.spendhead{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px}
+.spendhead h3{margin:0;font-size:18px}
+.spendtbl tfoot td{border-top:2px solid var(--border)}
+@media (max-width:520px){.spendgrid{grid-template-columns:1fr}}
 .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}
 table{border-collapse:collapse;width:100%;min-width:560px}
 th{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
@@ -588,7 +593,7 @@ const TABS = [
   {k:"forecast",  t:"Cash forecast",  g:"Money", money:true},
   {k:"pipeline",  t:"Pipeline",       g:"Money", money:true},
   {k:"docs",      t:"Documents",      g:"Money", money:true},
-  {k:"expenses",  t:"My expenses",    g:"Money", owner:true},
+  {k:"expenses",  t:"Expenses",       g:"Money", money:true},
   {k:"projects",  t:"Project HQ",     g:"Work"},
   {k:"meeting",   t:"Weekly meeting", g:"Work"},
   {k:"leadership",t:"Leadership",     g:"Work"},
@@ -752,11 +757,11 @@ const SOURCES = [
   ["wmIssues","haus_wm_issues","sort"],
   ["wmMgmt","haus_wm_mgmt","sort"],
   ["wmHomework","haus_wm_homework","sort"],
-  ["myExp","haus_my_expenses","txn_date"],
-  ["myExpSum","haus_my_expenses_summary",null]
+  ["dirSpend","haus_director_spend","txn_date"],
+  ["dirOut","haus_director_money_out","txn_date"]
 ];
 
-const SRC_LABEL = {projects:"Projects",pdates:"Project dates",pupdates:"Project updates",pfinance:"Project finance",invoices:"Xero invoices",bills:"Xero bills",subs:"Subscriptions",snap:"Xero balance sheet",pnl:"Xero profit and loss",people:"People",contracts:"Contracts",staffMonths:"Staff costs",staffTotals:"Staff costs",staffRates:"Staff rates",staffPlan:"Staff plan",payroll:"Payroll run",staffAlloc:"Staff allocation",staffByPerson:"Staff costs",bank:"Bank statements",bankCash:"Bank balances",bankWeekly:"Bank statements",bankParty:"Spend by supplier",bankCard:"Card spend",bankFresh:"Bank statements",bankFY:"Bank statements",holidays:"Holidays",allowance:"Holiday allowances",meetings:"Meetings",issues:"Issues",todos:"To-dos",headlines:"Headlines",ratings:"Meetings",scorecard:"Scorecard",rocks:"Rocks",leadership:"Leadership",issuesData:"Data checks",links:"Links",members:"Access",renewals:"Renewals",docs:"Documents",comp:"Deadlines",pipe:"Pipeline",outbox:"Outbox",ci:"Contractor invoices",wmMeetings:"Weekly meeting",wmIntro:"Weekly meeting",wmProjects:"Weekly meeting",wmDepts:"Weekly meeting",wmIssues:"Weekly meeting",wmMgmt:"Weekly meeting",wmHomework:"Weekly meeting",myExp:"My expenses",myExpSum:"My expenses",orders:"Card orders",poReceipts:"Card receipts",poCard:"Card spend"};
+const SRC_LABEL = {projects:"Projects",pdates:"Project dates",pupdates:"Project updates",pfinance:"Project finance",invoices:"Xero invoices",bills:"Xero bills",subs:"Subscriptions",snap:"Xero balance sheet",pnl:"Xero profit and loss",people:"People",contracts:"Contracts",staffMonths:"Staff costs",staffTotals:"Staff costs",staffRates:"Staff rates",staffPlan:"Staff plan",payroll:"Payroll run",staffAlloc:"Staff allocation",staffByPerson:"Staff costs",bank:"Bank statements",bankCash:"Bank balances",bankWeekly:"Bank statements",bankParty:"Spend by supplier",bankCard:"Card spend",bankFresh:"Bank statements",bankFY:"Bank statements",holidays:"Holidays",allowance:"Holiday allowances",meetings:"Meetings",issues:"Issues",todos:"To-dos",headlines:"Headlines",ratings:"Meetings",scorecard:"Scorecard",rocks:"Rocks",leadership:"Leadership",issuesData:"Data checks",links:"Links",members:"Access",renewals:"Renewals",docs:"Documents",comp:"Deadlines",pipe:"Pipeline",outbox:"Outbox",ci:"Contractor invoices",wmMeetings:"Weekly meeting",wmIntro:"Weekly meeting",wmProjects:"Weekly meeting",wmDepts:"Weekly meeting",wmIssues:"Weekly meeting",wmMgmt:"Weekly meeting",wmHomework:"Weekly meeting",dirSpend:"Directors\u2019 spend",dirOut:"Money out",orders:"Card orders",poReceipts:"Card receipts",poCard:"Card spend"};
 let LOADER_AT = 0;
 function showLoader(title, slim){
   const L = el("loader"); if(!L) return;
@@ -934,7 +939,6 @@ function needsYou(){
   const td=(D.todos||[]).filter(t=>!t.done && t.due && dAway(t.due)<0).sort(by("due"));
   td.slice(0,6).forEach(t=>push("bad","To-do", t.todo+" · due "+dshort(t.due), t.owner, `<button class="btn small" data-act="tick-todo" data-id="${t.id}">Done</button>`));
   if(td.length>6) push("bad","To-do", (td.length-6)+" more overdue to-dos", null, go("overview","See all"));
-  if(ME && ME.role==="owner"){ const s=(D.myExpSum||[])[0]; if(s && Number(s.to_review)) push("note","My expenses", s.to_review+" card lines to mark business or personal", "you", go("expenses","Review")); }
   if(canMoney()) lateFeeds().filter(f=>f.late).forEach(f=>push("warn","Data", f.source+(f.age==null?" has never loaded":" last updated "+f.age+" days ago")+" · "+f.area, null, go("data","Check")));
   const order={crit:0,bad:1,warn:2,note:3}; items.sort((a,b)=>order[a.sev]-order[b.sev]);
   const cls={crit:"crit",bad:"bad",warn:"warn",note:""};
@@ -1137,7 +1141,6 @@ function renderTabs(){
     if(t.k==="finance"){ const n=(D.invoices||[]).filter(i=>Number(i.amount_due)>0).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="leadership"){ const n=(D.leadership||[]).filter(i=>i.status==="open"&&(i.urgency==="now")).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="docs"){ const n=(D.docs||[]).filter(x=>x.status!=="filed").length; if(n) b=`<span class="badge">${n}</span>`; }
-    if(t.k==="expenses"){ const s=(D.myExpSum||[])[0]; const n=s?Number(s.to_review)||0:0; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="data"){ const n=(D.issuesData||[]).filter(i=>!i.resolved&&i.severity==="blocking").length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="orders"){ const n=(D.orders||[]).filter(p=>(p.auto_created&&!p.reviewed_at&&p.xero_state!=="sent"&&p.stage!=="cancelled")||p.stage==="variance"||((p.stage==="receipt"||p.stage==="waiting")&&Number(p.days_without_receipt)>=3)).length+(D.poReceipts||[]).filter(r=>!r.po_id&&!r.dismissed).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="cost"){ const m=isoLocal(new Date(TODAY.getFullYear(),TODAY.getMonth(),1)); const n=(D.payroll||[]).filter(x=>x.month_start===m&&(x.run_section==="chase"||(x.invoice_id&&(x.approval_status==="pending"||x.approval_status==="on_hold")))).length; if(n) b=`<span class="badge">${n}</span>`; }
@@ -2774,65 +2777,82 @@ async function docForm(id){
   });
 }
 
-/* ── MY EXPENSES (owner only) ────────────────────────────────────────── */
-var EXPF = null;
+/* ── EXPENSES: directors' spend tracker (BIK) and Revolut money out ───── */
+var EXPD = "SC", EXPM = "";
+const DIR_NAME = {SC:"Sophie C", SW:"Sophie W"};
 async function loadExp(){
-  const [a,s] = await Promise.all([
-    sb.from("haus_my_expenses").select("*").order("txn_date",{ascending:true,nullsFirst:false}),
-    sb.from("haus_my_expenses_summary").select("*")
-  ]);
-  if(a.error) toast(a.error.message); else D.myExp = a.data||[];
-  if(!s.error) D.myExpSum = s.data||[];
+  const [a,b] = await Promise.all([fetchAll("haus_director_spend","txn_date"), fetchAll("haus_director_money_out","txn_date")]);
+  if(a.error) toast(a.error.message); else D.dirSpend = a.data||[];
+  if(b.error) toast(b.error.message); else D.dirOut = b.data||[];
 }
 async function expRpc(fn,args,msg){
   const { error } = await sb.rpc(fn,args);
-  if(error){ toast(error.message); return false; }
+  if(error){ toast("Not saved: "+error.message); return false; }
   await loadExp(); render(); renderTabs(); if(msg) toast(msg); return true;
 }
-function vMyExpenses(){
-  if(!ME || ME.role!=="owner") return noAccess("My expenses is Sophie's own review list and only shows on the owner account.");
-  const rows = (D.myExp||[]).slice().sort(by("txn_date",-1));
-  const s = (D.myExpSum||[])[0] || {};
-  const owed = Number(s.owed_to_haus_gbp)||0, toReview = Number(s.to_review)||0, flaggedN = Number(s.flagged_personal)||0;
-  const F = {
-    flagged: {t:"Flagged personal", f:r=>r.verdict==="unreviewed" && r.suggested==="personal"},
-    review:  {t:"To review",        f:r=>r.verdict==="unreviewed"},
-    owed:    {t:"Owed back",        f:r=>["personal","split"].includes(r.verdict) && !r.settled},
-    business:{t:"Business",         f:r=>r.verdict==="business"},
-    repaid:  {t:"Repaid",           f:r=>r.settled},
-    all:     {t:"All",              f:r=>true}
-  };
-  if(!EXPF || !F[EXPF]) EXPF = rows.some(F.flagged.f) ? "flagged" : "review";
-  const list = rows.filter(F[EXPF].f);
-
-  let h = `<h2 class="sec">My expenses <span class="aside">${s.from_date?d(s.from_date)+" to "+d(s.to_date):""}</span></h2>`;
-  h += `<p class="hint">Spend you initiated on HAUS accounts and cards, from the bank feed. Mark each line business, personal or split. Personal lines, and the personal part of a split, are what you owe back to HAUS. Only the owner account can see this tab.</p>`;
-  h += `<div class="tiles">`;
-  h += tile("Owed back to HAUS", money2(owed,"GBP"), "personal and split lines not yet repaid", owed>0?"bad":"good");
-  h += tile("To review", num(toReview), flaggedN+" flagged as likely personal", toReview?"warn":"good");
-  h += tile("Repaid so far", money2(Number(s.settled_gbp)||0,"GBP"), "marked as settled", "");
-  h += tile("Lines", num(Number(s.lines)||rows.length), "spend initiated by you", "");
-  h += `</div>`;
-  if(owed>0) h += `<div class="actions"><button class="btn primary" data-act="exp-settle">Mark ${money2(owed,"GBP")} repaid</button>
-    <span class="small muted" style="align-self:center">Settles every personal and split line not yet repaid, with the reference you give it.</span></div>`;
-  h += `<div class="actions">` + Object.entries(F).map(([k,v])=>`<button class="btn small ${EXPF===k?"primary":""}" data-act="exp-filter" data-f="${k}">${esc(v.t)} (${rows.filter(v.f).length})</button>`).join("") + `</div>`;
-  h += list.length ? `<div class="tablewrap" style="margin-top:12px"><table>
-    <thead><tr><th>Date</th><th>Merchant</th><th class="r">Amount</th><th>Suggested</th><th>Verdict</th><th class="r">Owed back</th><th></th></tr></thead><tbody>`
-    + list.map(r=>{
-      const gbp = Math.abs(Number(r.amount_gbp)||0);
-      const vc = {business:"good",personal:"bad",split:"warn",unsure:"acc"}[r.verdict]||"";
-      const meta = [r.account,r.category,r.project_code].filter(Boolean).map(esc).join(" &middot; ");
-      return `<tr>
+function spendForm(r, dir){
+  r=r||{};
+  return [
+    {k:"dir",label:"Whose",options:[["SC","Sophie C"],["SW","Sophie W"]],value:r.director||dir||"SC"},
+    {k:"d",label:"Date",type:"date",value:r.txn_date||isoLocal(new Date())},
+    {k:"desc",label:"Description",value:r.description||"",placeholder:"e.g. Hotel (Ibiza)"},
+    {k:"ccy",label:"Currency",options:["GBP","EUR","USD","AED"].map(c=>[c,c]),value:r.ccy||"GBP"},
+    {k:"amt",label:"Amount",type:"number",step:"0.01",value:r.amount!=null?r.amount:""},
+    {k:"gbp",label:"GBP amount",type:"number",step:"0.01",required:false,value:r.amount_gbp!=null?r.amount_gbp:"",hint:"Leave blank for GBP; fill in for other currencies."},
+    {k:"url",label:"Receipt / link",type:"url",required:false,value:r.receipt_url||"",placeholder:"https://"},
+    {k:"note",label:"Note",type:"textarea",required:false,value:r.note||""}
+  ];
+}
+function spendArgs(id,fr,txn){
+  const n=x=>x===""||x==null?null:Number(String(x).replace(/[^0-9.\-]/g,""));
+  return {p_id:id,p_director:fr.dir,p_date:fr.d,p_description:fr.desc,p_ccy:fr.ccy,p_amount:n(fr.amt),p_amount_gbp:n(fr.gbp),p_receipt_url:fr.url||null,p_note:fr.note||null,p_txn_id:txn||null};
+}
+function spendTable(dir){
+  const rows=(D.dirSpend||[]).filter(r=>r.director===dir).sort(by("txn_date"));
+  const tot=sum(rows,r=>Number(r.amount_gbp)||0);
+  let h=`<div class="spendcard"><div class="spendhead"><h3>Company Spend Tracker: ${dir}</h3>
+    <button class="btn small" data-act="spend-add" data-dir="${dir}">Add</button></div>
+    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th><th>Receipt / Link</th><th></th></tr></thead><tbody>`;
+  h += rows.length ? rows.map(r=>`<tr>
       <td class="num tiny" style="white-space:nowrap">${d(r.txn_date)}</td>
-      <td><b>${esc(r.merchant||"")}</b>${r.description&&r.description!==r.merchant?`<div class="tiny faint">${esc(r.description)}</div>`:""}
-        ${meta?`<div class="tiny faint">${meta}</div>`:""}${r.note?`<div class="tiny muted">${esc(r.note)}</div>`:""}</td>
-      <td class="r num">${money2(Math.abs(Number(r.amount)||0),r.ccy)}${r.ccy&&r.ccy!=="GBP"?`<div class="tiny faint">${money2(gbp,"GBP")}</div>`:""}</td>
-      <td>${r.suggested?`<span class="chip ${r.suggested==="personal"?"warn":""}">${esc(r.suggested)}</span>`:""}${r.suggested_reason?`<div class="tiny faint">${esc(r.suggested_reason)}</div>`:""}</td>
-      <td><span class="chip ${vc}">${esc(r.verdict)}</span>${r.settled?`<div class="tiny faint">repaid ${r.settled_on?d(r.settled_on):""}${r.settled_ref?" &middot; "+esc(r.settled_ref):""}</div>`:""}</td>
-      <td class="r num">${Number(r.owed_to_haus_gbp)?money2(r.owed_to_haus_gbp,"GBP"):"&mdash;"}</td>
-      <td style="white-space:nowrap">${r.settled?"":["business","personal","split"].map(v=>`<button class="btn small ${r.verdict===v?"primary":""}" data-act="exp-verdict" data-v="${v}" data-id="${r.id}">${v[0].toUpperCase()+v.slice(1)}</button>`).join(" ")}</td>
-    </tr>`; }).join("") + `</tbody></table></div>`
-    : `<div class="rows" style="margin-top:12px"><div class="empty">Nothing in this view.</div></div>`;
+      <td>${esc(r.description||"")}${r.note?`<div class="tiny faint">${esc(r.note)}</div>`:""}</td>
+      <td class="tiny">${esc(r.ccy||"")}</td>
+      <td class="r num">${num(r.amount)}</td>
+      <td class="r num">${money2(r.amount_gbp,"GBP")}</td>
+      <td class="tiny">${r.receipt_url?`<a href="${esc(r.receipt_url)}" target="_blank" rel="noopener">Open</a>`:"&mdash;"}</td>
+      <td style="white-space:nowrap"><button class="btn small" data-act="spend-edit" data-id="${r.id}">Edit</button> <button class="btn small" data-act="spend-remove" data-id="${r.id}">Remove</button></td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty">Nothing added yet.</td></tr>`;
+  h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
+  return h;
+}
+function vMyExpenses(){
+  if(!canMoney()) return noAccess("Expenses is only for the directors.");
+  const sp=D.dirSpend||[], out=(D.dirOut||[]).slice().sort(by("txn_date",-1));
+  const tSC=sum(sp.filter(r=>r.director==="SC"),r=>Number(r.amount_gbp)||0), tSW=sum(sp.filter(r=>r.director==="SW"),r=>Number(r.amount_gbp)||0);
+  let h=`<h2 class="sec">Directors&rsquo; spend <span class="aside">benefit in kind</span></h2>`;
+  h+=`<p class="hint">Personal transactions you and Soph have chosen to put through the business, to be reported as a benefit in kind. Add them here, or pick them from the money out list below.</p>`;
+  h+=`<div class="tiles">`+tile("Sophie C",money2(tSC,"GBP"),sp.filter(r=>r.director==="SC").length+" items","")+tile("Sophie W",money2(tSW,"GBP"),sp.filter(r=>r.director==="SW").length+" items","")+tile("Total",money2(tSC+tSW,"GBP"),"both directors","")+`</div>`;
+  h+=`<div class="spendgrid">${spendTable("SC")}${spendTable("SW")}</div>`;
+
+  const months=[...new Set(out.map(r=>String(r.txn_date||"").slice(0,7)).filter(Boolean))];
+  if(EXPM && !months.includes(EXPM)) EXPM="";
+  const list=out.filter(r=>r.director===EXPD && (!EXPM || String(r.txn_date).startsWith(EXPM)));
+  const mName=m=>new Date(m+"-01T00:00:00").toLocaleDateString("en-GB",{month:"short",year:"numeric"});
+  h+=`<h2 class="sec" style="margin-top:28px">Money out <span class="aside">Revolut, paid by each of you</span></h2>`;
+  h+=`<p class="hint">Every payment from the Revolut GBP, USD and EUR accounts made by Sophie C or Sophie W, newest first. Add any that are personal to the tracker above.</p>`;
+  h+=`<div class="actions">`+["SC","SW"].map(k=>`<button class="btn small ${EXPD===k?"primary":""}" data-act="out-dir" data-dir="${k}">${DIR_NAME[k]} (${out.filter(r=>r.director===k).length})</button>`).join("")
+    +`<select data-act="out-month" class="btn small"><option value="">All months</option>${months.map(m=>`<option value="${m}" ${EXPM===m?"selected":""}>${mName(m)}</option>`).join("")}</select>`
+    +`<span class="small muted" style="align-self:center">${list.length} payments &middot; ${money2(sum(list,r=>Number(r.amount_gbp)||0),"GBP")}</span></div>`;
+  h+= list.length ? `<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Paid to</th><th>Account</th><th class="r">Amount</th><th class="r">GBP</th><th></th></tr></thead><tbody>`
+    + list.map(r=>`<tr>
+      <td class="num tiny" style="white-space:nowrap">${d(r.txn_date)}</td>
+      <td><b>${esc(r.merchant||"")}</b>${r.reference&&r.reference!==r.merchant?`<div class="tiny faint">${esc(r.reference)}</div>`:""}${r.category?`<div class="tiny faint">${esc(r.category)}</div>`:""}</td>
+      <td class="tiny">${esc(r.account||"")}</td>
+      <td class="r num">${money2(r.amount,r.ccy)}</td>
+      <td class="r num">${money2(r.amount_gbp,"GBP")}</td>
+      <td style="white-space:nowrap">${r.in_tracker?`<span class="chip good">in tracker</span>`:`<button class="btn small" data-act="out-track" data-id="${r.id}">Add to tracker</button>`}</td>
+    </tr>`).join("") + `</tbody></table></div>`
+    : `<div class="rows" style="margin-top:12px"><div class="empty">No payments in this view.</div></div>`;
   return h;
 }
 
@@ -4023,6 +4043,7 @@ document.addEventListener("click", async e=>{
   else if(a==="poc-skip"){ const fr=await formAsk("No PO needed",[{k:"n",label:"Why? (optional)",required:false,placeholder:"e.g. monthly subscription"}],"Save"); if(!fr) return; const { error } = await sb.rpc("haus_po_card_skip",{p_txn_id:id,p_reason:fr.n||null,p_skip:true}); if(error){ toast(error.message); return; } await poReload("Marked as not needing a PO"); }
 });
 document.addEventListener("change", e=>{ const t=e.target; if(t&&t.id==="poJob"){ POJOB=t.value; render(); } });
+document.addEventListener("change", e=>{ const t=e.target; if(t&&t.dataset&&t.dataset.act==="out-month"){ EXPM=t.value; render(); } });
 document.addEventListener("input", e=>{
   const t=e.target; if(!t||t.id!=="poQ") return;
   POQ=t.value; const pos=t.selectionStart; render(); const n=el("poQ"); if(n){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(err){} }
@@ -4835,28 +4856,25 @@ document.addEventListener("click", async e=>{
       closeDrawer(); await loadAll(); render(); renderTabs(); toast("Deleted");
       break;
     }
-    case "exp-filter": EXPF = b.dataset.f; render(); break;
-    case "exp-verdict": {
-      const x = (D.myExp||[]).find(r=>r.id===id); if(!x) break;
-      const v = b.dataset.v; let pg = null;
-      if(v==="split"){
-        const full = Math.abs(Number(x.amount_gbp)||0);
-        const fr = await formAsk("Split this expense",[{k:"s",label:"Personal part in GBP",type:"number",step:"0.01",value:x.personal_gbp!=null?x.personal_gbp:(full/2).toFixed(2),hint:"The full line is "+money2(full,"GBP").replace(/&[a-z]+;/g,"")+". The personal part is what you owe back to HAUS."}],"Save split");
-        if(!fr) break; const s = fr.s;
-        pg = Number(String(s).replace(/[£,\s]/g,""));
-        if(!(pg>0) || pg>full){ toast("Enter an amount above zero and no more than the full line."); break; }
-      }
-      await expRpc("haus_review_expense",{p_txn:id,p_verdict:v,p_personal_gbp:pg,p_note:null},
-        v==="business"?"Marked business":v==="personal"?"Marked personal":"Split saved");
-      break;
+    case "spend-add": {
+      const fr=await formAsk("Add to the spend tracker",spendForm(null,b.dataset.dir),"Add");
+      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr),"Added"); break;
     }
-    case "exp-settle": {
-      const s = (D.myExpSum||[])[0]; const owed = s ? Number(s.owed_to_haus_gbp)||0 : 0;
-      if(!(owed>0)){ toast("Nothing owed back right now."); break; }
-      const fr = await formAsk("Mark "+money2(owed,"GBP").replace(/&[a-z]+;/g,"")+" repaid to HAUS",[{k:"ref",label:"Reference for the repayment",value:"Repaid "+new Date().toLocaleDateString("en-GB"),hint:"Settles every personal and split line not yet repaid."}],"Mark repaid");
-      if(!fr || !String(fr.ref||"").trim()) break; const ref = fr.ref;
-      await expRpc("haus_settle_expenses",{p_ref:ref.trim()},"Marked repaid");
-      break;
+    case "spend-edit": {
+      const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
+      const fr=await formAsk("Edit tracker item",spendForm(r),"Save");
+      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(id,fr),"Saved"); break;
+    }
+    case "spend-remove": {
+      const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
+      const fr=await formAsk("Remove from the tracker?",[{k:"ok",label:"Remove "+(r.description||"this item")+" from "+DIR_NAME[r.director]+"'s tracker",options:[["yes","Yes, remove it"]],value:"yes"}],"Remove");
+      if(!fr) break; await expRpc("haus_director_spend_remove",{p_id:id},"Removed"); break;
+    }
+    case "out-dir": EXPD=b.dataset.dir; render(); break;
+    case "out-track": {
+      const t=(D.dirOut||[]).find(x=>x.id===id); if(!t) break;
+      const fr=await formAsk("Add to the spend tracker",spendForm({director:t.director,txn_date:t.txn_date,description:t.merchant,ccy:t.ccy,amount:t.amount,amount_gbp:t.ccy==="GBP"?null:t.amount_gbp}),"Add");
+      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr,id),"Added"); break;
     }
     case "close-drawer": closeDrawer(); break;
     case "new-project": projectForm(null); break;
