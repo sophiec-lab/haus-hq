@@ -2778,7 +2778,7 @@ async function docForm(id){
 }
 
 /* ── EXPENSES: directors' spend tracker (BIK) and Revolut money out ───── */
-var EXPD = "SC", EXPM = "";
+
 const DIR_NAME = {SC:"Sophie C", SW:"Sophie W"};
 async function loadExp(){
   const [a,b] = await Promise.all([fetchAll("haus_director_spend","txn_date"), fetchAll("haus_director_money_out","txn_date")]);
@@ -2825,34 +2825,28 @@ function spendTable(dir){
   h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
   return h;
 }
-function vMyExpenses(){
-  if(!canMoney()) return noAccess("Expenses is only for the directors.");
-  const sp=D.dirSpend||[], out=(D.dirOut||[]).slice().sort(by("txn_date",-1));
-  const tSC=sum(sp.filter(r=>r.director==="SC"),r=>Number(r.amount_gbp)||0), tSW=sum(sp.filter(r=>r.director==="SW"),r=>Number(r.amount_gbp)||0);
-  let h=`<h2 class="sec">Directors&rsquo; spend <span class="aside">benefit in kind</span></h2>`;
-  h+=`<p class="hint">Personal transactions you and Soph have chosen to put through the business, to be reported as a benefit in kind. Add them here, or pick them from the money out list below.</p>`;
-  h+=`<div class="tiles">`+tile("Sophie C",money2(tSC,"GBP"),sp.filter(r=>r.director==="SC").length+" items","")+tile("Sophie W",money2(tSW,"GBP"),sp.filter(r=>r.director==="SW").length+" items","")+tile("Total",money2(tSC+tSW,"GBP"),"both directors","")+`</div>`;
-  h+=`<div class="spendgrid">${spendTable("SC")}${spendTable("SW")}</div>`;
-
-  const months=[...new Set(out.map(r=>String(r.txn_date||"").slice(0,7)).filter(Boolean))];
-  if(EXPM && !months.includes(EXPM)) EXPM="";
-  const list=out.filter(r=>r.director===EXPD && (!EXPM || String(r.txn_date).startsWith(EXPM)));
-  const mName=m=>new Date(m+"-01T00:00:00").toLocaleDateString("en-GB",{month:"short",year:"numeric"});
-  h+=`<h2 class="sec" style="margin-top:28px">Money out <span class="aside">Revolut, paid by each of you</span></h2>`;
-  h+=`<p class="hint">Every payment from the Revolut GBP, USD and EUR accounts made by Sophie C or Sophie W, newest first. Add any that are personal to the tracker above.</p>`;
-  h+=`<div class="actions">`+["SC","SW"].map(k=>`<button class="btn small ${EXPD===k?"primary":""}" data-act="out-dir" data-dir="${k}">${DIR_NAME[k]} (${out.filter(r=>r.director===k).length})</button>`).join("")
-    +`<select data-act="out-month" class="btn small"><option value="">All months</option>${months.map(m=>`<option value="${m}" ${EXPM===m?"selected":""}>${mName(m)}</option>`).join("")}</select>`
-    +`<span class="small muted" style="align-self:center">${list.length} payments &middot; ${money2(sum(list,r=>Number(r.amount_gbp)||0),"GBP")}</span></div>`;
-  h+= list.length ? `<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Paid to</th><th>Account</th><th class="r">Amount</th><th class="r">GBP</th><th></th></tr></thead><tbody>`
-    + list.map(r=>`<tr>
+function outTable(dir){
+  const rows=(D.dirOut||[]).filter(r=>r.director===dir).sort(by("txn_date"));
+  const tot=sum(rows,r=>Number(r.amount_gbp)||0);
+  let h=`<div class="spendcard"><div class="spendhead"><h3>Money out: ${dir}</h3></div>
+    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th><th></th></tr></thead><tbody>`;
+  h += rows.length ? rows.map(r=>`<tr>
       <td class="num tiny" style="white-space:nowrap">${d(r.txn_date)}</td>
-      <td><b>${esc(r.merchant||"")}</b>${r.reference&&r.reference!==r.merchant?`<div class="tiny faint">${esc(r.reference)}</div>`:""}${r.category?`<div class="tiny faint">${esc(r.category)}</div>`:""}</td>
-      <td class="tiny">${esc(r.account||"")}</td>
-      <td class="r num">${money2(r.amount,r.ccy)}</td>
+      <td>${esc(r.merchant||"")}${r.reference&&r.reference!==r.merchant?`<div class="tiny faint">${esc(r.reference)}</div>`:""}</td>
+      <td class="tiny">${esc(r.ccy||"")}</td>
+      <td class="r num">${num(r.amount)}</td>
       <td class="r num">${money2(r.amount_gbp,"GBP")}</td>
       <td style="white-space:nowrap">${r.in_tracker?`<span class="chip good">in tracker</span>`:`<button class="btn small" data-act="out-track" data-id="${r.id}">Add to tracker</button>`}</td>
-    </tr>`).join("") + `</tbody></table></div>`
-    : `<div class="rows" style="margin-top:12px"><div class="empty">No payments in this view.</div></div>`;
+    </tr>`).join("") : `<tr><td colspan="6" class="empty">No payments since 1 Sep 2026.</td></tr>`;
+  h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td><td></td></tr></tfoot></table></div></div>`;
+  return h;
+}
+function vMyExpenses(){
+  if(!canMoney()) return noAccess("Expenses is only for the directors.");
+  let h=`<h2 class="sec">Company Spend Tracker</h2>`;
+  h+=`<div class="spendgrid">${spendTable("SC")}${spendTable("SW")}</div>`;
+  h+=`<h2 class="sec" style="margin-top:28px">Money out <span class="aside">Revolut, from 1 Sep 2026</span></h2>`;
+  h+=`<div class="spendgrid">${outTable("SC")}${outTable("SW")}</div>`;
   return h;
 }
 
@@ -4043,7 +4037,6 @@ document.addEventListener("click", async e=>{
   else if(a==="poc-skip"){ const fr=await formAsk("No PO needed",[{k:"n",label:"Why? (optional)",required:false,placeholder:"e.g. monthly subscription"}],"Save"); if(!fr) return; const { error } = await sb.rpc("haus_po_card_skip",{p_txn_id:id,p_reason:fr.n||null,p_skip:true}); if(error){ toast(error.message); return; } await poReload("Marked as not needing a PO"); }
 });
 document.addEventListener("change", e=>{ const t=e.target; if(t&&t.id==="poJob"){ POJOB=t.value; render(); } });
-document.addEventListener("change", e=>{ const t=e.target; if(t&&t.dataset&&t.dataset.act==="out-month"){ EXPM=t.value; render(); } });
 document.addEventListener("input", e=>{
   const t=e.target; if(!t||t.id!=="poQ") return;
   POQ=t.value; const pos=t.selectionStart; render(); const n=el("poQ"); if(n){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(err){} }
@@ -4870,7 +4863,6 @@ document.addEventListener("click", async e=>{
       const fr=await formAsk("Remove from the tracker?",[{k:"ok",label:"Remove "+(r.description||"this item")+" from "+DIR_NAME[r.director]+"'s tracker",options:[["yes","Yes, remove it"]],value:"yes"}],"Remove");
       if(!fr) break; await expRpc("haus_director_spend_remove",{p_id:id},"Removed"); break;
     }
-    case "out-dir": EXPD=b.dataset.dir; render(); break;
     case "out-track": {
       const t=(D.dirOut||[]).find(x=>x.id===id); if(!t) break;
       const fr=await formAsk("Add to the spend tracker",spendForm({director:t.director,txn_date:t.txn_date,description:t.merchant,ccy:t.ccy,amount:t.amount,amount_gbp:t.ccy==="GBP"?null:t.amount_gbp}),"Add");
