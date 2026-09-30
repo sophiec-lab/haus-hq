@@ -400,7 +400,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .inv-seg button:last-child{border-right:0}
 .inv-seg button.on{background:var(--ink);color:var(--bg)}
 .inv-seg button span{font-family:'JetBrains Mono',monospace;font-size:11px;opacity:.7;margin-left:3px}
-#invQ{font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--ink);margin-left:auto;width:260px}
+#invQ,#poQ{font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--ink);margin-left:auto;width:260px}
 .inv-t{min-width:900px}
 .inv-acts{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
 .inv-t{min-width:1100px}
@@ -451,7 +451,7 @@ tr.po-flag td:first-child{box-shadow:inset 3px 0 0 var(--flare)}
 .po-how li{margin:0 0 10px}
 @media (max-width:600px){.po-kv{grid-template-columns:1fr;gap:2px}}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
-@media (max-width:760px){#invQ{margin-left:0;width:100%}}
+@media (max-width:760px){#invQ,#poQ{margin-left:0;width:100%}}
 .pr-alloc-list{display:flex;flex-direction:column;gap:2px;font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap}
 .pr-t button.chip.pr-allocbtn{border-radius:8px;display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;white-space:nowrap;padding:4px 8px}
 @media (max-width:760px){.pr-find{margin-left:0;width:100%}.pr-find input{flex:1;width:auto}}
@@ -600,7 +600,7 @@ const TABS_DONE = ["cost","invoices","orders","finance","forecast","expenses","p
 const TABS = [
   {k:"overview",  t:"Overview",       g:"Today"},
   {k:"outbox",    t:"Outbox",         g:"Today", money:true},
-  {k:"finance",   t:"Finance",        g:"Money"},
+  {k:"finance",   t:"Finance",        g:"Money", money:true},
   {k:"invoices",  t:"Invoices",       g:"Money", money:true},
   {k:"orders",    t:"Card orders",    g:"Money", money:true},
   {k:"forecast",  t:"Cash forecast",  g:"Money", money:true},
@@ -940,7 +940,7 @@ function needsYou(){
     const sched=owedBills().filter(b=>b.pay_status==="scheduled" && b.scheduled_for && dAway(b.scheduled_for)<=7);
     sched.forEach(b=>push(dAway(b.scheduled_for)<0?"bad":"warn","Pay", "Pay "+(b.contact||"")+" "+money2(b.amount_due,b.ccy)+" · scheduled "+dshort(b.scheduled_for), null, `<button class="btn small" data-act="bill-paid" data-id="${b.id}">Paid</button>`));
     const open=owedBills().filter(b=>b.pay_status!=="scheduled");
-    if(open.length) push("warn","Bills", open.length+" bills open in Xero, "+money(sum(open,r=>r.amount_due),"GBP")+": pay, schedule or query each one", null, go("finance","Review"));
+    if(open.length) push("warn","Bills", open.length+" bills open in Xero, "+money(sum(open,r=>gbpOr(r.amount_due,r.ccy)),"GBP")+": pay, schedule or query each one", null, go("finance","Review"));
     const lk=likelyBills(); if(lk.length) push("warn","Bills", lk.length+" bills noted LIKELY PAID to confirm against the bank, "+money(sum(lk,r=>r.amount_due),"GBP"), null, go("finance","Confirm"));
     (D.docs||[]).filter(x=>x.status==="action").forEach(x=>push(x.action_due&&dAway(x.action_due)<0?"bad":"warn","Document", x.title+(x.action_note?": "+x.action_note:"")+(x.action_due?" · by "+dshort(x.action_due):""), null, `<button class="btn small" data-act="doc-edit" data-id="${x.id}">Open</button>`));
     const tofile=(D.docs||[]).filter(x=>x.status==="to_file"); if(tofile.length) push("note","Documents", tofile.length+" documents waiting to be filed", null, go("docs","File"));
@@ -1016,7 +1016,7 @@ function vForecast(){
   const bc=bankCash(); const opening=Number(bc.total)||0;
   const start=new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); start.setDate(start.getDate()-((start.getDay()+6)%7));
   const weeks=[...Array(13)].map((_,i)=>{ const a=new Date(start); a.setDate(a.getDate()+7*i); return {a, inn:0, bills:0, people:0, subs:0}; });
-  const wk=ds=>{ if(!ds) return 0; const t=new Date(ds+"T00:00:00"); if(t<weeks[0].a) return 0; const i=Math.floor((t-weeks[0].a)/(7*86400000)); return i<13?i:-1; };
+  const wk=ds=>{ if(!ds) return 0; const t=new Date(ds+"T00:00:00"); if(t<weeks[0].a) return 0; const i=Math.floor(Math.round((t-weeks[0].a)/86400000)/7); return i<13?i:-1; };
   let overdueIn=0;
   (D.invoices||[]).filter(i=>Number(i.amount_due)>0).forEach(i=>{ const due=i.due_date?new Date(i.due_date+"T00:00:00"):null;
     if(!due || due<weeks[0].a) overdueIn+=Number(i.amount_due); else { const k=wk(i.due_date); if(k>=0) weeks[k].inn+=Number(i.amount_due); } });
@@ -1026,7 +1026,7 @@ function vForecast(){
   let unconv=0;
   sup.forEach(x=>{ if(x.gbp==null){ unconv++; return; } const k=wk(x.when); if(k>=0) weeks[k].bills+=x.gbp; else if(!x.when||x.when<isoLocal(weeks[0].a)) weeks[0].bills+=x.gbp; });
   owedBills().filter(b=>!supNames.some(n=>n&&String(b.contact||"").toLowerCase().includes(n.split(" ")[0])))
-    .forEach(b=>{ const k=wk(b.pay_status==="scheduled"&&b.scheduled_for?b.scheduled_for:b.due_date); if(k>=0) weeks[k].bills+=Number(b.amount_due)||0; else weeks[0].bills+=Number(b.amount_due)||0; });
+    .forEach(b=>{ const k=wk(b.pay_status==="scheduled"&&b.scheduled_for?b.scheduled_for:b.due_date); if(k>=0) weeks[k].bills+=gbpOr(b.amount_due,b.ccy); });
   /* People: last month's staff cost, paid on payment day (the 28th, or the Friday before). */
   const lm=(D.staffTotals||[]).slice().sort(by("month_start",-1))[0]; const monthly=lm?Number(lm.sheet_total!=null?lm.sheet_total:lm.built_total)||0:0;
   for(let m=0;m<5;m++){ const pd=prPayday(isoLocal(new Date(start.getFullYear(), start.getMonth()+m, 1))); const k=wk(pd); if(k>=0 && pd>=isoLocal(TODAY)) weeks[k].people+=monthly; }
@@ -1116,7 +1116,7 @@ function plForm(r){
     {k:"stage",label:"Stage",options:PL_STAGES.map(s=>[s,s[0].toUpperCase()+s.slice(1)]),value:r.stage||"lead"},
     {k:"probability",label:"Chance of winning (%)",type:"number",step:"1",required:false,value:r.probability!=null?r.probability:"",hint:"Leave blank to use the stage default."},
     {k:"expected_close",label:"Expected close",type:"date",required:false,value:r.expected_close||""},
-    {k:"owner",label:"Owner",required:false,value:r.owner||(ME&&ME.full_name||"").split(" ")[0]},
+    {k:"owner",label:"Owner",required:false,value:r.id?(r.owner||""):(ME&&ME.full_name||"").split(" ")[0]},
     {k:"next_step",label:"Next step",required:false,value:r.next_step||""},
     {k:"next_step_due",label:"Next step by",type:"date",required:false,value:r.next_step_due||""},
     {k:"notes",label:"Notes",type:"textarea",required:false,value:r.notes||""}
@@ -1176,7 +1176,7 @@ function renderTabs(){
     if(t.k==="leadership"){ const n=(D.leadership||[]).filter(i=>i.status==="open"&&(i.urgency==="now")).length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="docs"){ const n=(D.docs||[]).filter(x=>x.status==="action").length; if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="data"){ const n=(D.issuesData||[]).filter(i=>!i.resolved&&i.severity==="blocking").length; if(n) b=`<span class="badge">${n}</span>`; }
-    if(t.k==="orders"){ const n=(D.orders||[]).filter(p=>(p.auto_created&&!p.reviewed_at&&p.xero_state!=="sent"&&p.stage!=="cancelled")||p.stage==="variance"||((p.stage==="receipt"||p.stage==="waiting")&&Number(p.days_without_receipt)>=3)).length+(D.poReceipts||[]).filter(r=>!r.po_id&&!r.dismissed).length; if(n) b=`<span class="badge">${n}</span>`; }
+    if(t.k==="orders"){ const n=poTodoCount(); if(n) b=`<span class="badge">${n}</span>`; }
     if(t.k==="cost"){ const m=isoLocal(new Date(TODAY.getFullYear(),TODAY.getMonth(),1)); const n=(D.payroll||[]).filter(x=>x.month_start===m&&(x.run_section==="chase"||(x.invoice_id&&(x.approval_status==="pending"||x.approval_status==="on_hold")))).length; if(n) b=`<span class="badge">${n}</span>`; }
     return `<button data-tab="${t.k}" class="${TAB===t.k?"on":""}${TABS_DONE.includes(t.k)?"":" todo"}" title="${TABS_DONE.includes(t.k)?"":"Not reworked yet"}">${esc(t.t)}${b}</button>`;
   };
@@ -1550,7 +1550,7 @@ function vFinance(){
   const s = D.snapshot;
   const inv = (D.invoices||[]).filter(i=>Number(i.amount_due)>0).sort(by("due_date"));
   const bills = owedBills().sort(by("due_date")), likely = likelyBills().sort(by("due_date")), paidW = paidBills().sort(by("due_date"));
-  const owed = sum(inv,r=>r.amount_due), owing = sum(bills,r=>r.amount_due);
+  const owed = sum(inv,r=>r.amount_due), owing = sum(bills,r=>gbpOr(r.amount_due,r.ccy));
   const overdueIn = inv.filter(i=>i.days_overdue>0);
   const old3 = bills.filter(b=>b.age_bucket==="3+ months");
 
@@ -1664,7 +1664,7 @@ function vFinance(){
      last charged / 12-month spend / charge_state come from the bank feeds through
      match_patterns in public.haus_subscriptions (29 Sep 2026). */
   const subsAll = (D.subs||[]);
-  const perMonth = x => { const f = {monthly:1, quarterly:1/3, annual:1/12}[x.cycle]; return (x.amount==null||f==null) ? null : Number(x.amount)*f; };
+  const perMonth = x => { const f = {monthly:1, quarterly:1/3, annual:1/12}[x.cycle]; return (x.amount==null||f==null) ? null : gbpOr(x.amount,x.ccy)*f; };
   const liveSubs = subsAll.filter(x=>x.status!=="cancelled");
   const goneSubs = subsAll.filter(x=>x.status==="cancelled");
   const undecided = liveSubs.filter(x=>!x.verdict||x.verdict==="undecided");
@@ -1677,7 +1677,7 @@ function vFinance(){
   const quiet = liveSubs.filter(x=>x.charge_state==="stopped");
   const dueDate = x => x.next_renewal || x.next_expected;
   const dYear = s => s ? new Date(s+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : "&mdash;";
-  const daysTo = d => d ? Math.round((new Date(d+"T00:00:00") - new Date(TODAY.toISOString().slice(0,10)+"T00:00:00"))/864e5) : null;
+  const daysTo = d => d ? Math.round((new Date(d+"T00:00:00") - new Date(isoLocal(TODAY)+"T00:00:00"))/864e5) : null;
   const soon = liveSubs.filter(x=>{ const n = daysTo(dueDate(x)); return n!=null && n>=0 && n<=14; }).sort((a,b)=>daysTo(dueDate(a))-daysTo(dueDate(b)));
 
   h += `<h2 class="sec">Subscriptions <span class="aside">${liveSubs.length} running${goneSubs.length?`, ${goneSubs.length} stopped`:""}</span>
@@ -2741,7 +2741,7 @@ function vDocs(){
         ${x.status==="action"&&(x.action_note||x.action_due)?`<div class="tiny" style="color:var(--flare)">${esc(x.action_note||"")}${x.action_due?" by "+dshort(x.action_due):""}</div>`:""}
         ${x.comment?`<div class="small doccomment">${esc(x.comment)}</div>`:""}</div>
       <div class="docbtns">${x.status!=="filed"?`<button class="btn small primary" data-act="doc-done" data-id="${x.id}">${x.status==="action"?"Done, file it":"File it"}</button>`:""}<button class="btn small" data-act="doc-note" data-id="${x.id}">${x.comment?"Edit note":"Note"}</button><button class="btn small" data-act="doc-edit" data-id="${x.id}">Edit</button></div></div>`;
-  let h = `<h2 class="sec">Key documents <span class="aside">${all.length} filed</span></h2>`;
+  let h = `<h2 class="sec">Key documents <span class="aside">${all.filter(x=>x.status==="filed"&&known.has(x.section)).length} filed</span></h2>`;
   h += `<div class="actions">
     <label class="btn primary" style="cursor:pointer">Upload files<input type="file" data-upload="upload" multiple accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.txt,.eml" hidden></label>
     <label class="btn primary" style="cursor:pointer">Photograph a letter<input type="file" data-upload="photo" accept="image/*" capture="environment" hidden></label>
@@ -2885,6 +2885,7 @@ function spendForm(r, dir){
     {k:"note",label:"Note",type:"textarea",required:false,value:r.note||""}
   ];
 }
+function spendNeedsGbp(fr){ if(fr.ccy!=="GBP" && (fr.gbp===""||fr.gbp==null)){ toast("Add the GBP amount for a "+fr.ccy+" item so the totals are right."); return true; } return false; }
 function spendArgs(id,fr,txn){
   const n=x=>x===""||x==null?null:Number(String(x).replace(/[^0-9.\-]/g,""));
   return {p_id:id,p_director:fr.dir,p_date:fr.d,p_description:fr.desc,p_ccy:fr.ccy,p_amount:n(fr.amt),p_amount_gbp:n(fr.gbp),p_receipt_url:fr.url||null,p_note:fr.note||null,p_txn_id:txn||null,p_category:fr.cat||"Other"};
@@ -2966,6 +2967,7 @@ function bankCash(){
 /* GBP per unit, from the rates the bank feed already holds. */
 function gbpRate(ccy){ if(!ccy||ccy==="GBP") return 1; const r=(D.bankCash||[]).find(x=>x.ccy===ccy&&Number(x.rate_now)); return r?Number(r.rate_now):null; }
 function toGbp(a,ccy){ const k=gbpRate(ccy); return k?Number(a||0)/k:null; }
+function gbpOr(a,ccy){ const v=toGbp(a,ccy||"GBP"); return v==null?(Number(a)||0):v; }
 /* What the board itself says is still to pay: supplier invoices on Invoices and
    staff invoices on Staff cost that are not paid yet. */
 function boardToPay(){
@@ -3093,7 +3095,7 @@ function vBankSection(){
     straight out, so it counts once, as spend. In Xero the same payment is a transfer to Wise GBP. The Capital on Tap card is
     a debt, never added to cash; its spend comes from the monthly statement.</p>`;
 
-  const today = TODAY.toISOString().slice(0,10);
+  const today = isoLocal(TODAY);
   const fys = (D.bankFY||[]).filter(f=>f.bank_from).slice().sort(by("fy",-1));
   if(fys.length){
     h += `<h2 class="sec">Cash in and out by financial year <span class="aside">year ends 31 August</span></h2>`;
@@ -3557,6 +3559,11 @@ function poCardTable(list){
     <td class="small">${esc(t.source==="capital_on_tap"?"Capital on Tap":"Revolut "+(t.account||""))}${t.initiated_by?`<div class="tiny faint">${esc(t.initiated_by)}</div>`:""}</td>
     <td class="r"><span class="num">${money2(t.amount,t.ccy||"GBP")}</span>${t.ccy&&t.ccy!=="GBP"&&t.amount_gbp!=null?`<div class="tiny faint">${money2(t.amount_gbp,"GBP")}</div>`:""}</td>
     <td class="r"><div class="inv-acts"><button class="btn small primary" data-act="poc-new" data-id="${t.id}">Raise PO</button><button class="btn small" data-act="poc-link" data-id="${t.id}">Link to a PO</button><button class="btn small" data-act="poc-skip" data-id="${t.id}">No PO needed</button></div></td></tr>`).join("")+`</tbody></table></div>`;
+}
+function poTodoCount(){
+  try{ const all=poAll(); const st=s=>all.filter(p=>p.stage===s);
+    return all.filter(p=>p.auto_created&&!p.reviewed_at&&p.stage!=="cancelled"&&p.xero_state!=="sent").length+st("variance").length+st("query").length
+      +all.filter(p=>p.stage==="receipt"||p.stage==="waiting").length+poUnmatched().length+poCardOpen().length; }catch(e){ return 0; }
 }
 function vOrders(){
   setTimeout(poPoll,80); setTimeout(poBackfillFiles,120);
@@ -4274,8 +4281,8 @@ function invActions(x){
 function invLastEdit(r){
   const log=Array.isArray(r.edit_log)?r.edit_log:[]; if(!log.length) return "";
   const e=log[log.length-1];
-  let what=e.what||"Edited";
-  if(e.changes&&(e.what||"Edited")==="Edited"){ const k=Object.keys(e.changes); what = k.includes("total") ? `Amount changed from ${esc(String(e.changes.total[0]??"none"))} to ${esc(String(e.changes.total[1]??"none"))}` + (k.length>1?` and ${k.length-1} more`:"") : `Edited ${k.map(f=>f.replace(/_/g," ")).join(", ")}`; }
+  let what=esc(e.what||"Edited");
+  if(e.changes&&(e.what||"Edited")==="Edited"){ const k=Object.keys(e.changes); what = k.includes("total") ? `Amount changed from ${esc(String(e.changes.total[0]??"none"))} to ${esc(String(e.changes.total[1]??"none"))}` + (k.length>1?` and ${k.length-1} more`:"") : `Edited ${esc(k.map(f=>f.replace(/_/g," ")).join(", "))}`; }
   return `<div class="tiny faint" title="${esc(log.map(x=>(x.at||"").slice(0,10)+" "+(x.by||"")+": "+(x.what||"")+(x.note?" ("+x.note+")":"")).join("\n"))}">${what} · ${esc(e.by||"")} ${e.at?dshort(String(e.at).slice(0,10)):""}${log.length>1?` · ${log.length} changes`:""}</div>`;
 }
 function invTable(list, opts){
@@ -4887,7 +4894,7 @@ document.addEventListener("click", async e=>{
     case "cp-add": await rpc("haus_save_compliance",{p_id:null,p_data:{title:"New deadline"}},"Added"); break;
     case "pl-add": { const fr=await formAsk("Add lead",plForm(null),"Add"); if(fr) await rpc("haus_save_pipeline",{p_id:null,p_data:plData(fr)},"Added"); break; }
     case "pl-edit": { const r=(D.pipe||[]).find(x=>x.id===id); if(!r) break; const fr=await formAsk("Edit "+(r.client||"lead"),plForm(r),"Save");
-      if(fr) await rpc("haus_save_pipeline",{p_id:id,p_data:plData(fr)},"Saved"); break; }
+      if(fr){ if(fr.stage!==r.stage && String(fr.probability)===String(r.probability??"")) fr.probability=""; await rpc("haus_save_pipeline",{p_id:id,p_data:plData(fr)},"Saved"); } break; }
     case "pl-del": if(confirm("Remove this lead?")) await rpc("haus_save_pipeline",{p_id:id,p_data:{delete:"true"}},"Removed"); break;
     case "wm-new": {
       const t = new Date(); t.setHours(12,0,0,0);
@@ -4960,7 +4967,7 @@ document.addEventListener("click", async e=>{
     }
     case "spend-manual": {
       const fr=await formAsk("Add to the spend tracker",spendForm(null,SPEND_DIR),"Add");
-      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr),"Added"); break;
+      if(!fr||spendNeedsGbp(fr)) break; await expRpc("haus_director_spend_save",spendArgs(null,fr),"Added"); break;
     }
     case "spend-pick": {
       const t=SPEND_HITS.find(x=>x.id===id); if(!t) break;
@@ -4970,7 +4977,7 @@ document.addEventListener("click", async e=>{
     case "spend-edit": {
       const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
       const fr=await formAsk("Edit tracker item",spendForm(r),"Save");
-      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(id,fr),"Saved"); break;
+      if(!fr||spendNeedsGbp(fr)) break; await expRpc("haus_director_spend_save",spendArgs(id,fr),"Saved"); break;
     }
     case "spend-remove": {
       const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
