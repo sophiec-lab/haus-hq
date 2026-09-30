@@ -1888,43 +1888,41 @@ function vStaff(){
       + `</div>`;
   }
 
+  const curC = pid => contracts.filter(c=>c.person_id===pid).slice().sort((x,y)=>(y.start_date||y.signed_on||"").localeCompare(x.start_date||x.signed_on||""));
+  const today0 = isoLocal(TODAY);
+  const cChip = c => {
+    if(!c) return `<span class="chip bad">No contract</span>`;
+    if(c.status==="terminated") return `<span class="chip">Ended${c.end_date?" "+dshort(c.end_date):""}</span>`;
+    if(c.end_date && c.end_date<today0) return `<span class="chip bad">Expired ${dshort(c.end_date)}</span>`;
+    if(c.status==="expired") return `<span class="chip bad">Not in force</span>`;
+    if(c.end_date){ const n=Math.round((new Date(c.end_date+"T00:00:00")-new Date(today0+"T00:00:00"))/864e5); return `<span class="chip ${n<=60?"warn":"good"}">${n<=60?"Ends":"Active to"} ${d(c.end_date)}</span>`; }
+    return `<span class="chip good">Active, no end date</span>`;
+  };
+  const rateTxt = c => c&&c.rate!=null ? money2(c.rate,c.rate_ccy||"GBP").replace(/\.00(?=\D*$)/,"")+(c.rate_basis?" / "+esc(c.rate_basis):"") : "";
   h += `<h2 class="sec">The team</h2><div class="tablewrap"><table>
-    <thead><tr><th>Name</th><th>Role</th><th>Engagement</th><th>Company</th><th>Contracts</th><th>Email</th><th></th></tr></thead><tbody>`
+    <thead><tr><th>Name</th><th>Role</th><th>Contract</th><th>Pay on contract</th><th>Location</th><th>Email</th><th></th></tr></thead><tbody>`
     + active.map(p=>{
-      const cs = contracts.filter(c=>c.person_id===p.id);
-      return `<tr><td><b>${esc(p.full_name)}</b>${p.known_as?`<div class="tiny faint">${esc(p.known_as)}</div>`:""}</td>
+      const cs = curC(p.id), c = cs[0];
+      const needs = p.engagement!=="director";
+      return `<tr><td><b>${esc(p.full_name)}</b>${p.known_as?`<div class="tiny faint">${esc(p.known_as)}</div>`:""}<div class="tiny faint">${esc(p.engagement||"")}${p.start_date?" &middot; since "+d(p.start_date):""}</div></td>
         <td class="small">${esc(p.job_title||"")}</td>
-        <td><span class="chip">${esc(p.engagement||"")}</span></td>
-        <td class="tiny muted">${esc(p.company||"")}</td>
-        <td class="num tiny">${cs.length||"&mdash;"}</td>
+        <td>${needs?cChip(c):`<span class="tiny faint">director</span>`}${c?`<div class="tiny faint">${c.doc_link?`<a href="${esc(c.doc_link)}" target="_blank" rel="noopener">${esc(c.title)}</a>`:esc(c.title)}${c.notice_period?" &middot; notice: "+esc(c.notice_period):""}</div>`:""}${cs.length>1?`<div class="tiny faint">${cs.length-1} earlier</div>`:""}</td>
+        <td class="small num">${rateTxt(c)}</td>
+        <td class="tiny muted">${esc(p.location||"")}</td>
         <td class="tiny muted">${esc(p.email||"")}</td>
-        <td>${canMoney()?`<button class="btn small" data-act="edit-person" data-id="${p.id}">Edit</button>`:""}</td></tr>`;
+        <td style="white-space:nowrap">${canMoney()?`<button class="btn small" data-act="edit-person" data-id="${p.id}">Edit</button>${c?` <button class="btn small" data-act="edit-contract" data-id="${c.id}">Contract</button>`:""}`:""}</td></tr>`
+        + (p.notes?`<tr><td></td><td colspan="6" class="tiny muted" style="border-top:0;padding-top:0">${esc(p.notes)}</td></tr>`:"");
     }).join("") + `</tbody></table></div>`;
 
   if(canMoney()) h += `<div class="actions"><button class="btn" data-act="new-contract">Add a contract</button></div>`;
 
   if(gone.length){
     h += `<h2 class="sec">Departed and inactive</h2><div class="rows">`
-      + gone.map(p=>`<div class="row flex"><div class="grow">${esc(p.full_name)} <span class="tiny faint">${esc(p.job_title||"")}</span></div>
+      + gone.map(p=>`<div class="row flex"><div class="grow">${esc(p.full_name)} <span class="tiny faint">${esc(p.job_title||"")}${p.status==="dormant"?" &middot; dormant":""}</span></div>
         <div class="tiny muted">${p.end_date?d(p.end_date):esc(p.status)}</div></div>`).join("") + `</div>`;
-  }
-
-  if(contracts.length){
-    h += `<h2 class="sec">All contracts</h2><div class="tablewrap"><table>
-      <thead><tr><th>Title</th><th>Person</th><th>Kind</th><th>Start</th><th>End</th><th>Renewal</th><th>Notice</th><th>Signed</th><th></th></tr></thead><tbody>`
-      + contracts.map(c=>`<tr><td>${esc(c.title)}${c.doc_link?` <a href="${esc(c.doc_link)}" target="_blank" rel="noopener">doc</a>`:""}</td>
-        <td>${esc(c.person_name||c.counterparty||"")}</td><td class="tiny">${esc(c.kind)}</td>
-        <td class="num tiny">${c.start_date?dshort(c.start_date):"&mdash;"}</td>
-        <td class="num tiny">${c.end_date?dshort(c.end_date):"&mdash;"}</td>
-        <td class="num tiny">${c.renewal_date?dshort(c.renewal_date):"&mdash;"}</td>
-        <td class="tiny">${esc(c.notice_period||"")}</td>
-        <td><span class="chip ${c.signed?"good":"bad"}">${c.signed?"yes":"no"}</span></td>
-        <td>${canMoney()?`<button class="btn small" data-act="edit-contract" data-id="${c.id}">Edit</button>`:""}</td></tr>`).join("")
-      + `</tbody></table></div>`;
   }
   return h;
 }
-
 function personForm(id){
   const p = id ? (D.people||[]).find(x=>x.id===id) : {};
   const f=(k,def)=>esc(p[k]==null?(def==null?"":def):p[k]);
