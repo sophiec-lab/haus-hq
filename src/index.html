@@ -172,6 +172,7 @@ h2.sec .aside{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:
 .spendhead{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px}
 .spendhead h3{margin:0;font-size:18px}
 .spendtbl tfoot td{border-top:2px solid var(--border)}
+.spendtbl tr.spendsec td{background:var(--surface-2,rgba(0,0,0,.04));font-size:12px;letter-spacing:.04em;text-transform:uppercase}
 @media (max-width:520px){.spendgrid{grid-template-columns:1fr}}
 .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}
 table{border-collapse:collapse;width:100%;min-width:560px}
@@ -2780,6 +2781,13 @@ async function docForm(id){
 /* ── EXPENSES: directors' spend tracker (BIK) and Revolut money out ───── */
 
 const DIR_NAME = {SC:"Sophie C", SW:"Sophie W"};
+const SPEND_CATS = ["Travel","Tech","Other"];
+function spendGuess(t){
+  t=String(t||"").toLowerCase();
+  if(/air|flight|easyjet|ryanair|jet2|vueling|hotel|booking|airbnb|uber|bolt|taxi|train|rail|tfl|car hire|rental|hertz|avis|europcar|parking|ferry|nici/.test(t)) return "Travel";
+  if(/apple|google|microsoft|adobe|software|claude|openai|chatgpt|zoom|fireflies|notion|canva|laptop|macbook|iphone|ipad|currys|argos|amazon|dell|cricut/.test(t)) return "Tech";
+  return t?"Other":"Travel";
+}
 var SPEND_DIR = "SC", SPEND_HITS = [], SPEND_T = null, SPEND_SEQ = 0;
 function spendHitsHtml(q){
   if(String(q||"").trim().length<2) return `<div class="tiny faint">Type at least two letters.</div>`;
@@ -2816,6 +2824,7 @@ function spendForm(r, dir){
   r=r||{};
   return [
     {k:"dir",label:"Whose",options:[["SC","Sophie C"],["SW","Sophie W"]],value:r.director||dir||"SC"},
+    {k:"cat",label:"Section",options:SPEND_CATS.map(c=>[c,c]),value:r.category||spendGuess(r.description)},
     {k:"d",label:"Date",type:"date",value:r.txn_date||isoLocal(new Date())},
     {k:"desc",label:"Description",value:r.description||"",placeholder:"e.g. Hotel (Ibiza)"},
     {k:"ccy",label:"Currency",options:["GBP","EUR","USD","AED"].map(c=>[c,c]),value:r.ccy||"GBP"},
@@ -2827,15 +2836,12 @@ function spendForm(r, dir){
 }
 function spendArgs(id,fr,txn){
   const n=x=>x===""||x==null?null:Number(String(x).replace(/[^0-9.\-]/g,""));
-  return {p_id:id,p_director:fr.dir,p_date:fr.d,p_description:fr.desc,p_ccy:fr.ccy,p_amount:n(fr.amt),p_amount_gbp:n(fr.gbp),p_receipt_url:fr.url||null,p_note:fr.note||null,p_txn_id:txn||null};
+  return {p_id:id,p_director:fr.dir,p_date:fr.d,p_description:fr.desc,p_ccy:fr.ccy,p_amount:n(fr.amt),p_amount_gbp:n(fr.gbp),p_receipt_url:fr.url||null,p_note:fr.note||null,p_txn_id:txn||null,p_category:fr.cat||"Other"};
 }
 function spendTable(dir){
-  const rows=(D.dirSpend||[]).filter(r=>r.director===dir).sort(by("txn_date"));
-  const tot=sum(rows,r=>Number(r.amount_gbp)||0);
-  let h=`<div class="spendcard"><div class="spendhead"><h3>Company Spend Tracker: ${dir}</h3>
-    <button class="btn small" data-act="spend-add" data-dir="${dir}">Add</button></div>
-    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th><th>Receipt / Link</th><th></th></tr></thead><tbody>`;
-  h += rows.length ? rows.map(r=>`<tr>
+  const all=(D.dirSpend||[]).filter(r=>r.director===dir).sort(by("txn_date"));
+  const tot=sum(all,r=>Number(r.amount_gbp)||0);
+  const row=r=>`<tr>
       <td class="num tiny" style="white-space:nowrap">${d(r.txn_date)}</td>
       <td>${esc(r.description||"")}${r.note?`<div class="tiny faint">${esc(r.note)}</div>`:""}</td>
       <td class="tiny">${esc(r.ccy||"")}</td>
@@ -2843,7 +2849,16 @@ function spendTable(dir){
       <td class="r num">${money2(r.amount_gbp,"GBP")}</td>
       <td class="tiny">${r.receipt_url?`<a href="${esc(r.receipt_url)}" target="_blank" rel="noopener">Open</a>`:"&mdash;"}</td>
       <td style="white-space:nowrap"><button class="btn small" data-act="spend-edit" data-id="${r.id}">Edit</button> <button class="btn small" data-act="spend-remove" data-id="${r.id}">Remove</button></td>
-    </tr>`).join("") : `<tr><td colspan="7" class="empty">Nothing added yet.</td></tr>`;
+    </tr>`;
+  let h=`<div class="spendcard"><div class="spendhead"><h3>Company Spend Tracker: ${dir}</h3>
+    <button class="btn small" data-act="spend-add" data-dir="${dir}">Add</button></div>
+    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th><th>Receipt / Link</th><th></th></tr></thead><tbody>`;
+  SPEND_CATS.forEach(c=>{
+    const rows=all.filter(r=>(r.category||"Other")===c);
+    if(c==="Other" && !rows.length) return;
+    h+=`<tr class="spendsec"><td colspan="4"><b>${c}</b></td><td class="r num"><b>${money2(sum(rows,r=>Number(r.amount_gbp)||0),"GBP")}</b></td><td colspan="2"></td></tr>`;
+    h+= rows.length ? rows.map(row).join("") : `<tr><td colspan="7" class="empty">Nothing yet.</td></tr>`;
+  });
   h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
   return h;
 }
