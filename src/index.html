@@ -1070,26 +1070,47 @@ function vForecast(){
   h+=`<p class="hint" style="margin-top:12px">An estimate from what is on the board. It starts from today's cash, adds Xero invoices on their due dates, takes off supplier invoices waiting on Invoices (on their Friday run) and any bill open in Xero that the board does not already have, last month's staff cost of ${money(monthly,"GBP")} on each payment day, and GBP subscriptions on their renewal dates, leaving out any marked to cancel. Capital on Tap repayments are left out: card spend on events is recharged to the client, and subscriptions on the card are counted in the Subscriptions row. Scalers\' monthly fee and directors\' pay are expected items kept in haus.forecast_items. ${fItems.filter(x=>!x.counted).map(x=>`Not counted: ${esc(x.label)} (${x.direction==="in"?"+":"−"}${money(x.amount_gbp,"GBP")}, ${dshort(x.first_date)}): ${esc(x.note||"")}`).join(" ")}${unconv?` ${unconv} invoice${unconv===1?" is":"s are"} in a currency the board has no rate for, so left out.`:""}</p>`;
   return h;
 }
+const PL_STAGES=["lead","qualified","proposal","negotiation","won","lost"];
+const PL_PROB={lead:10,qualified:25,proposal:50,negotiation:75,won:100,lost:0};
 function vPipeline(){
   if(!canMoney()) return noAccess("The pipeline is limited to owner and leadership accounts.");
-  const rows=(D.pipe||[]).slice().sort((a,b)=>(a.expected_close||"9999").localeCompare(b.expected_close||"9999"));
+  const rows=(D.pipe||[]).slice().sort((a,b)=>PL_STAGES.indexOf(a.stage)-PL_STAGES.indexOf(b.stage)||(a.expected_close||"9999").localeCompare(b.expected_close||"9999"));
   const open=rows.filter(r=>!["won","lost"].includes(r.stage)), won=rows.filter(r=>r.stage==="won");
   const byC=(arr,f)=>{ const o={}; arr.forEach(r=>{ const c=r.ccy||"GBP"; o[c]=(o[c]||0)+f(r); }); const s=Object.entries(o).filter(([,v])=>v).map(([c,v])=>money(v,c)).join(" + "); return s||"&mdash;"; };
-  const STG=["lead","qualified","proposal","negotiation","won","lost"];
   let h=`<h2 class="sec">Pipeline <span class="aside">HAUS's own new business</span><button class="btn primary" data-act="pl-add">Add lead</button></h2>`;
   h+=`<div class="tiles">`+tile("Open opportunities",num(open.length),"lead to negotiation")+tile("Open value",byC(open,r=>Number(r.value)||0),"face value")
-    +tile("Weighted value",byC(open,r=>(Number(r.value)||0)*(Number(r.probability)||0)/100),"value × probability")+tile("Won",byC(won,r=>Number(r.value)||0),won.length+" deals", won.length?"good":"")+`</div>`;
-  const inp=(r,f,type,ph,w)=>`<input class="wm-in" ${type?`type="${type}"`:""} data-pl="${f}" data-id="${r.id}" value="${esc(r[f]==null?"":r[f])}" placeholder="${esc(ph||"")}" ${w?`style="min-width:${w}px"`:""}>`;
-  h+=`<div class="tablewrap wm" style="margin-top:12px"><table style="min-width:1100px"><thead><tr><th>Client</th><th>Opportunity</th><th style="width:110px">Value</th><th style="width:70px">Ccy</th><th style="width:120px">Stage</th><th style="width:70px">%</th><th style="width:140px">Expected close</th><th style="width:100px">Owner</th><th>Next step</th><th style="width:140px">By</th><th></th></tr></thead><tbody>`
-    + (rows.length? rows.map(r=>`<tr><td>${inp(r,"client")}</td><td>${inp(r,"opportunity")}</td><td>${inp(r,"value","","0")}</td><td>${inp(r,"ccy")}</td>
-      <td><select data-pl="stage" data-id="${r.id}">${STG.map(s=>`<option ${r.stage===s?"selected":""}>${s}</option>`).join("")}</select></td>
-      <td>${inp(r,"probability","","%")}</td><td>${inp(r,"expected_close","date")}</td><td>${inp(r,"owner")}</td><td>${inp(r,"next_step")}</td><td>${inp(r,"next_step_due","date")}</td>
-      <td><button class="btn small x" data-act="pl-del" data-id="${r.id}">×</button></td></tr>`).join("")
-      : `<tr><td colspan="11" class="empty">No leads yet. Add proposals and enquiries as they come in; the weighted value will feed the cash forecast later.</td></tr>`)
+    +tile("Weighted value",byC(open,r=>(Number(r.value)||0)*(Number(r.probability)||0)/100),"value × probability")+tile("Won",byC(won,r=>Number(r.value)||0),won.length+(won.length===1?" deal":" deals"), won.length?"good":"")+`</div>`;
+  const sc={won:"good",lost:"bad",negotiation:"warn",proposal:"acc"};
+  h+=`<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Client and opportunity</th><th class="r">Value</th><th>Stage</th><th>Owner</th><th>Next step</th><th></th></tr></thead><tbody>`
+    + (rows.length? rows.map(r=>`<tr>
+      <td><b>${esc(r.client||"")}</b>${r.opportunity?`<div class="small">${esc(r.opportunity)}</div>`:""}${r.contact?`<div class="tiny faint">${esc(r.contact)}</div>`:""}${r.notes?`<div class="tiny muted" style="margin-top:4px">${esc(r.notes)}</div>`:""}</td>
+      <td class="r num" style="white-space:nowrap">${r.value!=null&&r.value!==""?money(Number(r.value),r.ccy||"GBP"):`<span class="faint">not set</span>`}</td>
+      <td style="white-space:nowrap"><span class="chip ${sc[r.stage]||""}">${esc(r.stage||"")}</span><div class="tiny faint">${r.probability!=null?esc(r.probability)+"%":""}${r.expected_close?" &middot; close "+dshort(r.expected_close):""}</div></td>
+      <td class="small">${esc(r.owner||"")}</td>
+      <td class="small">${esc(r.next_step||"")}${r.next_step_due?`<div class="tiny" style="color:var(--flare)">by ${dshort(r.next_step_due)}</div>`:""}</td>
+      <td style="white-space:nowrap"><button class="btn small" data-act="pl-edit" data-id="${r.id}">Edit</button> <button class="btn small x" data-act="pl-del" data-id="${r.id}" title="Remove">×</button></td></tr>`).join("")
+      : `<tr><td colspan="6" class="empty">No leads yet. Add proposals and enquiries as they come in.</td></tr>`)
     + `</tbody></table></div>`;
-  h+=`<p class="hint" style="margin-top:10px">Nothing feeds this automatically yet. Everything saves when you click out of a box.</p>`;
   return h;
 }
+function plForm(r){
+  r=r||{};
+  return [
+    {k:"client",label:"Client",value:r.client||""},
+    {k:"opportunity",label:"Opportunity",required:false,value:r.opportunity||"",placeholder:"e.g. Corporate offsite, Lisbon, Mar 2027"},
+    {k:"contact",label:"Contact",required:false,value:r.contact||"",placeholder:"Name, email"},
+    {k:"value",label:"Value (HAUS fee)",type:"number",step:"0.01",required:false,value:r.value!=null?r.value:""},
+    {k:"ccy",label:"Currency",options:["GBP","USD","EUR","AED"].map(c=>[c,c]),value:r.ccy||"GBP"},
+    {k:"stage",label:"Stage",options:PL_STAGES.map(s=>[s,s[0].toUpperCase()+s.slice(1)]),value:r.stage||"lead"},
+    {k:"probability",label:"Chance of winning (%)",type:"number",step:"1",required:false,value:r.probability!=null?r.probability:"",hint:"Leave blank to use the stage default."},
+    {k:"expected_close",label:"Expected close",type:"date",required:false,value:r.expected_close||""},
+    {k:"owner",label:"Owner",required:false,value:r.owner||(ME&&ME.full_name||"").split(" ")[0]},
+    {k:"next_step",label:"Next step",required:false,value:r.next_step||""},
+    {k:"next_step_due",label:"Next step by",type:"date",required:false,value:r.next_step_due||""},
+    {k:"notes",label:"Notes",type:"textarea",required:false,value:r.notes||""}
+  ];
+}
+function plData(fr){ const d=Object.assign({},fr); if(d.probability===""||d.probability==null) d.probability=String(PL_PROB[d.stage]??""); return d; }
 function vDeadlines(){
   if(!canMoney()) return noAccess("Company deadlines are limited to owner and leadership accounts.");
   const rows=(D.comp||[]).slice().sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
@@ -4834,7 +4855,9 @@ document.addEventListener("click", async e=>{
     case "go": closeDrawer(); TAB=b.dataset.tab; location.hash=TAB; renderTabs(); render(); window.scrollTo(0,0); break;
     case "comp-done": await rpc("haus_save_compliance",{p_id:id,p_data:{status:"done"}},"Marked done"); break;
     case "cp-add": await rpc("haus_save_compliance",{p_id:null,p_data:{title:"New deadline"}},"Added"); break;
-    case "pl-add": await rpc("haus_save_pipeline",{p_id:null,p_data:{client:"New lead", owner:(ME.full_name||"").split(" ")[0]}},"Added"); break;
+    case "pl-add": { const fr=await formAsk("Add lead",plForm(null),"Add"); if(fr) await rpc("haus_save_pipeline",{p_id:null,p_data:plData(fr)},"Added"); break; }
+    case "pl-edit": { const r=(D.pipe||[]).find(x=>x.id===id); if(!r) break; const fr=await formAsk("Edit "+(r.client||"lead"),plForm(r),"Save");
+      if(fr) await rpc("haus_save_pipeline",{p_id:id,p_data:plData(fr)},"Saved"); break; }
     case "pl-del": if(confirm("Remove this lead?")) await rpc("haus_save_pipeline",{p_id:id,p_data:{delete:"true"}},"Removed"); break;
     case "wm-new": {
       const t = new Date(); t.setHours(12,0,0,0);
