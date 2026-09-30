@@ -2780,6 +2780,28 @@ async function docForm(id){
 /* ── EXPENSES: directors' spend tracker (BIK) and Revolut money out ───── */
 
 const DIR_NAME = {SC:"Sophie C", SW:"Sophie W"};
+var SPEND_DIR = "SC", SPEND_HITS = [], SPEND_T = null, SPEND_SEQ = 0;
+function spendHitsHtml(q){
+  if(String(q||"").trim().length<2) return `<div class="tiny faint">Type at least two letters.</div>`;
+  if(!SPEND_HITS.length) return `<div class="empty">Nothing found for &ldquo;${esc(q)}&rdquo;.</div>`;
+  return `<div class="rows">`+SPEND_HITS.map(t=>`<div class="row" style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+    <div><b>${esc(t.merchant||"")}</b><div class="tiny faint">${d(t.txn_date)} &middot; ${esc(t.account||"")}${t.initiated_by?" &middot; "+esc(t.initiated_by):""}${t.reference&&t.reference!==t.merchant?" &middot; "+esc(t.reference):""}</div></div>
+    <div style="text-align:right;white-space:nowrap"><div class="num">${money2(t.amount,t.ccy)}</div>${t.ccy!=="GBP"?`<div class="tiny faint">${money2(t.amount_gbp,"GBP")}</div>`:""}
+    ${t.in_tracker?`<span class="chip good">in tracker</span>`:`<button class="btn small primary" data-act="spend-pick" data-id="${t.id}">Add</button>`}</div></div>`).join("")+`</div>`;
+}
+document.addEventListener("input", e=>{
+  if(!e.target || e.target.id!=="spendSearch") return;
+  const q=e.target.value; clearTimeout(SPEND_T);
+  SPEND_T=setTimeout(async()=>{
+    const box=el("spendHits"); if(!box) return;
+    if(q.trim().length<2){ SPEND_HITS=[]; box.innerHTML=spendHitsHtml(q); return; }
+    const seq=++SPEND_SEQ; box.innerHTML=`<div class="tiny faint">Searching&hellip;</div>`;
+    const { data, error } = await sb.rpc("haus_bank_search",{p_q:q});
+    if(seq!==SPEND_SEQ) return;
+    if(error){ box.innerHTML=`<div class="empty">${esc(error.message)}</div>`; return; }
+    SPEND_HITS=data||[]; box.innerHTML=spendHitsHtml(q);
+  },300);
+});
 async function loadExp(){
   const [a,b] = await Promise.all([fetchAll("haus_director_spend","txn_date"), fetchAll("haus_director_money_out","txn_date")]);
   if(a.error) toast(a.error.message); else D.dirSpend = a.data||[];
@@ -4849,8 +4871,23 @@ document.addEventListener("click", async e=>{
       break;
     }
     case "spend-add": {
-      const fr=await formAsk("Add to the spend tracker",spendForm(null,b.dataset.dir),"Add");
+      SPEND_DIR=b.dataset.dir||"SC"; SPEND_HITS=[];
+      openDrawer(`<button class="btn close" data-act="close-drawer">Close</button><h3>Add to ${esc(DIR_NAME[SPEND_DIR])}'s tracker</h3>
+        <label class="f"><span>Find it in the bank</span><input class="i" id="spendSearch" type="search" placeholder="Shop, hotel, airline or an amount, e.g. nici or 574.50" autocomplete="off"></label>
+        <div class="tiny faint" style="margin-top:4px">Searches payments out of Revolut and the Capital on Tap card.</div>
+        <div id="spendHits" style="margin-top:12px"></div>
+        <div class="actions"><button class="btn" data-act="spend-manual">Enter it by hand instead</button></div>`);
+      setTimeout(()=>{ const i=el("spendSearch"); if(i) i.focus(); },60);
+      break;
+    }
+    case "spend-manual": {
+      const fr=await formAsk("Add to the spend tracker",spendForm(null,SPEND_DIR),"Add");
       if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr),"Added"); break;
+    }
+    case "spend-pick": {
+      const t=SPEND_HITS.find(x=>x.id===id); if(!t) break;
+      const fr=await formAsk("Add to the spend tracker",spendForm({director:SPEND_DIR,txn_date:t.txn_date,description:t.merchant,ccy:t.ccy,amount:t.amount,amount_gbp:t.ccy==="GBP"?null:t.amount_gbp}),"Add");
+      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr,id),"Added"); break;
     }
     case "spend-edit": {
       const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
@@ -4861,11 +4898,6 @@ document.addEventListener("click", async e=>{
       const r=(D.dirSpend||[]).find(x=>x.id===id); if(!r) break;
       const fr=await formAsk("Remove from the tracker?",[{k:"ok",label:"Remove "+(r.description||"this item")+" from "+DIR_NAME[r.director]+"'s tracker",options:[["yes","Yes, remove it"]],value:"yes"}],"Remove");
       if(!fr) break; await expRpc("haus_director_spend_remove",{p_id:id},"Removed"); break;
-    }
-    case "out-track": {
-      const t=(D.dirOut||[]).find(x=>x.id===id); if(!t) break;
-      const fr=await formAsk("Add to the spend tracker",spendForm({director:t.director,txn_date:t.txn_date,description:t.merchant,ccy:t.ccy,amount:t.amount,amount_gbp:t.ccy==="GBP"?null:t.amount_gbp}),"Add");
-      if(!fr) break; await expRpc("haus_director_spend_save",spendArgs(null,fr,id),"Added"); break;
     }
     case "close-drawer": closeDrawer(); break;
     case "new-project": projectForm(null); break;
