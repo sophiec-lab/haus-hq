@@ -1023,7 +1023,7 @@ function vForecast(){
   weeks.forEach(w=>w.card=0);
   /* Card repayments left out (29 Sep 2026, Sophie C): event spend on the card is only made when a client is paying for it, so it nets off. Card subscriptions are in the Subscriptions row instead. */
   if(false && cardAvg>0) for(let m=0;m<4;m++){ const t=new Date(start.getFullYear(), start.getMonth()+m, Math.min(repayDay,28)); const k=wk(isoLocal(t)); if(k>=0 && isoLocal(t)>=isoLocal(TODAY)) weeks[k].card+=cardAvg; }
-  (D.subs||[]).filter(s=>s.amount!=null && (s.ccy||"GBP")==="GBP" && s.status!=="cancelled" && (s.next_renewal||s.next_expected)).forEach(s=>{
+  (D.subs||[]).filter(s=>s.amount!=null && (s.ccy||"GBP")==="GBP" && s.status!=="cancelled" && s.verdict!=="cancel" && (s.next_renewal||s.next_expected)).forEach(s=>{
     const step=s.cycle==="monthly"?1:s.cycle==="quarterly"?3:s.cycle==="annual"?12:0; if(!step) return;
     const t=new Date((s.next_renewal||s.next_expected)+"T00:00:00"); let guard=0; while(t<weeks[0].a && guard++<60) t.setMonth(t.getMonth()+step);
     guard=0; while(guard++<20){ const k=wk(isoLocal(t)); if(k<0) break; weeks[k].subs+=Number(s.amount)||0; t.setMonth(t.getMonth()+step); } });
@@ -1062,7 +1062,7 @@ function vForecast(){
     <tr style="border-top:2px solid var(--ink)"><td><b>Cash at week end</b><div class="tiny faint">overdue invoices unpaid</div></td>${weeks.map(w=>cell(w.close)).join("")}</tr>
     <tr><td><b>If overdue invoices are paid now</b></td>${weeks.map(w=>cell(w.close2)).join("")}</tr>
   </tbody></table></div>`;
-  h+=`<p class="hint" style="margin-top:12px">An estimate from what is on the board. It starts from today's cash, adds Xero invoices on their due dates, takes off supplier invoices waiting on Invoices (on their Friday run) and any bill open in Xero that the board does not already have, last month's staff cost of ${money(monthly,"GBP")} on each payment day, and GBP subscriptions on their renewal dates. Capital on Tap repayments are left out: card spend on events is recharged to the client, and subscriptions on the card are counted in the Subscriptions row. Scalers\' monthly fee and directors\' pay are expected items kept in haus.forecast_items. ${fItems.filter(x=>!x.counted).map(x=>`Not counted: ${esc(x.label)} (${x.direction==="in"?"+":"−"}${money(x.amount_gbp,"GBP")}, ${dshort(x.first_date)}): ${esc(x.note||"")}`).join(" ")}${unconv?` ${unconv} invoice${unconv===1?" is":"s are"} in a currency the board has no rate for, so left out.`:""}</p>`;
+  h+=`<p class="hint" style="margin-top:12px">An estimate from what is on the board. It starts from today's cash, adds Xero invoices on their due dates, takes off supplier invoices waiting on Invoices (on their Friday run) and any bill open in Xero that the board does not already have, last month's staff cost of ${money(monthly,"GBP")} on each payment day, and GBP subscriptions on their renewal dates, leaving out any marked to cancel. Capital on Tap repayments are left out: card spend on events is recharged to the client, and subscriptions on the card are counted in the Subscriptions row. Scalers\' monthly fee and directors\' pay are expected items kept in haus.forecast_items. ${fItems.filter(x=>!x.counted).map(x=>`Not counted: ${esc(x.label)} (${x.direction==="in"?"+":"−"}${money(x.amount_gbp,"GBP")}, ${dshort(x.first_date)}): ${esc(x.note||"")}`).join(" ")}${unconv?` ${unconv} invoice${unconv===1?" is":"s are"} in a currency the board has no rate for, so left out.`:""}</p>`;
   return h;
 }
 function vPipeline(){
