@@ -2829,23 +2829,22 @@ function outTable(dir){
   const rows=(D.dirOut||[]).filter(r=>r.director===dir).sort(by("txn_date"));
   const tot=sum(rows,r=>Number(r.amount_gbp)||0);
   let h=`<div class="spendcard"><div class="spendhead"><h3>Money out: ${dir}</h3></div>
-    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th><th></th></tr></thead><tbody>`;
+    <div class="tablewrap"><table class="spendtbl"><thead><tr><th>Date</th><th>Description</th><th>Currency</th><th class="r">Amount</th><th class="r">GBP Amount</th></tr></thead><tbody>`;
   h += rows.length ? rows.map(r=>`<tr>
       <td class="num tiny" style="white-space:nowrap">${d(r.txn_date)}</td>
       <td>${esc(r.merchant||"")}${r.reference&&r.reference!==r.merchant?`<div class="tiny faint">${esc(r.reference)}</div>`:""}</td>
       <td class="tiny">${esc(r.ccy||"")}</td>
       <td class="r num">${num(r.amount)}</td>
       <td class="r num">${money2(r.amount_gbp,"GBP")}</td>
-      <td style="white-space:nowrap">${r.in_tracker?`<span class="chip good">in tracker</span>`:`<button class="btn small" data-act="out-track" data-id="${r.id}">Add to tracker</button>`}</td>
-    </tr>`).join("") : `<tr><td colspan="6" class="empty">No payments since 1 Sep 2026.</td></tr>`;
-  h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td><td></td></tr></tfoot></table></div></div>`;
+    </tr>`).join("") : `<tr><td colspan="5" class="empty">Nothing paid out since 1 Sep 2026.</td></tr>`;
+  h += `</tbody><tfoot><tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${money2(tot,"GBP")}</b></td></tr></tfoot></table></div></div>`;
   return h;
 }
 function vMyExpenses(){
   if(!canMoney()) return noAccess("Expenses is only for the directors.");
   let h=`<h2 class="sec">Company Spend Tracker</h2>`;
   h+=`<div class="spendgrid">${spendTable("SC")}${spendTable("SW")}</div>`;
-  h+=`<h2 class="sec" style="margin-top:28px">Money out <span class="aside">Revolut, from 1 Sep 2026</span></h2>`;
+  h+=`<h2 class="sec" style="margin-top:28px">Money out <span class="aside">paid to each of you from Revolut, from 1 Sep 2026</span></h2>`;
   h+=`<div class="spendgrid">${outTable("SC")}${outTable("SW")}</div>`;
   return h;
 }
