@@ -4246,17 +4246,21 @@ function invApprove(x){
 }
 /* A direct download for the invoice PDF: an updated upload first, then the
    saved Drive copy, then a Drive file link from the tracker. Never the email. */
+/* Opens the PDF in Google Drive's viewer in a new tab (download from there).
+   The direct-download link failed silently when the browser was signed in to
+   a different Google account first. */
 function invDownload(r){
-  if(r.attachment_url) return r.attachment_url;
-  if(r.attachment_drive_id) return "https://drive.google.com/uc?export=download&id="+r.attachment_drive_id;
-  const m=/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=download&)?id=)([\w-]{20,})/.exec(r.invoice_link||"");
-  return m ? "https://drive.google.com/uc?export=download&id="+m[1] : null;
+  const view=id=>"https://drive.google.com/file/d/"+id+"/view";
+  if(r.attachment_drive_id) return view(r.attachment_drive_id);
+  const m=/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=download&)?id=)([\w-]{20,})/.exec((r.attachment_url||"")+" "+(r.invoice_link||""));
+  if(m) return view(m[1]);
+  return r.attachment_url||null;
 }
 function invActions(x){
   const r=x.raw, L=[];
   const dl=invDownload(r);
   if(r.attachment_storage_path) L.push(`<button class="btn small" data-act="ri-dl" data-id="${r.id}" title="Download the invoice">Invoice</button>`);
-  else if(dl) L.push(`<a class="btn small" href="${esc(dl)}" rel="noopener" title="Download the invoice">Invoice</a>`);
+  else if(dl) L.push(`<a class="btn small" href="${esc(dl)}" target="_blank" rel="noopener" title="Open the invoice PDF">Invoice</a>`);
   else if(r.invoice_link && /^https:\/\//.test(r.invoice_link) && !/mail\.google\.com/.test(r.invoice_link)) L.push(`<a class="btn small" href="${esc(r.invoice_link)}" target="_blank" rel="noopener">Invoice</a>`);
   else if(r.email_message_id) L.push(`<span class="tiny faint" title="The PDF is being saved to Drive">PDF saving&hellip;</span>`);
   if(r.remittance_storage_path) L.push(`<button class="btn small good" data-act="ri-rdl" data-id="${r.id}" title="${esc((r.remittance_name||"")+(r.remittance_by?" · added by "+r.remittance_by:""))}">Payment confirmation</button>`);
@@ -4273,7 +4277,7 @@ function invActions(x){
       ? `<button class="btn small" data-act="ri-urgent" data-v="0" data-id="${r.id}">Not urgent</button>`
       : x.pay.group!=="today" ? `<button class="btn small" data-act="ri-urgent" data-v="1" data-id="${r.id}">Pay today</button>` : "") : "";
   const payBtn = invApproved(r) ? `<button class="btn small primary" data-act="ri-paid" data-id="${r.id}">Paid</button>`
-    : `<button class="btn small" disabled title="Needs the manager's and Sophie's approval before it can be paid">Approve to pay</button>`;
+    : `<button class="btn small primary" data-act="ri-apprall" data-id="${r.id}" title="Approve for payment">Approve to pay</button>`;
   return `${pdf}${payBtn}${urgent}<button class="btn small" data-act="ri-edit" data-id="${r.id}">Edit</button>${r.status==="query"?`<button class="btn small" data-act="ri-set" data-s="to_pay" data-id="${r.id}">Clear query</button>`:`<button class="btn small" data-act="ri-query" data-id="${r.id}">Query</button>`}`;
 }
 function invLastEdit(r){
@@ -4658,6 +4662,18 @@ document.addEventListener("click", async e=>{
   else if(a==="ri-dupok"){ const { error } = await sb.rpc("haus_received_invoice_dup_ok",{p_id:id,p_value:true}); if(error){ toast(error.message); return; } await riReload("Marked as not a duplicate"); }
   else if(a==="ri-pop"){ await riPop(id,b.dataset.aud); }
   else if(["pop-copy","pop-sent","pop-back","pop-skip","pop-draft","pop-send","pop-cancel"].includes(a)){ await riPopAct(a,b.dataset.id); }
+  else if(a==="ri-apprall"){
+    const r=(D.received||[]).find(x=>x.id===id); if(!r) return;
+    const isSophie=String(ME.email||"").toLowerCase()==="sophie.c@haus-events.co.uk";
+    const need=[]; if(!r.approved_by_manager) need.push("manager"); if(!r.approved_by_sophie&&isSophie) need.push("sophie");
+    if(!need.length){ toast("Sophie Carter still needs to approve this one"); return; }
+    const amt=r.total!=null?money2(r.total,r.ccy||"GBP"):"no amount";
+    const fr=await formAsk(`Approve ${r.supplier||"this invoice"} for payment`,[{k:"x",label:"Invoice",value:`${r.invoice_number||"no number"} · ${amt}${r.due_date?" · due "+dshort(r.due_date):""}`,readonly:true,required:false},{k:"y",label:"This approves it as",value:need.map(w=>w==="manager"?"Manager":"Sophie").join(" and "),readonly:true,required:false}],"Approve");
+    if(!fr) return;
+    for(const w of need){ const { error } = await sb.rpc("haus_received_invoice_approve",{p_id:id,p_who:w,p_value:true}); if(error){ toast("Not saved: "+error.message); await riReload(); return; } }
+    const full=(r.approved_by_manager||need.includes("manager"))&&(r.approved_by_sophie||need.includes("sophie"));
+    await riReload(full?"Approved: ready to pay":"Approved as manager: Sophie Carter's approval still needed");
+  }
   else if(a==="ri-appr"){
     const { error } = await sb.rpc("haus_received_invoice_approve",{p_id:id,p_who:b.dataset.who,p_value:b.dataset.v==="1"});
     if(error){ toast("Not saved: "+error.message); return; } await riReload(b.dataset.v==="1"?"Approved":"Approval removed");
