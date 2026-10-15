@@ -4363,8 +4363,11 @@ function vInvoices(){
     h+=invSection("Needs a due date","is-nodue",nodue,"No due date, so these are not in a payment run yet. Edit to add one, or press Pay today.");
     return h;
   }
+  /* Paid: most recently paid first (undated ones at the bottom). Others: newest invoice first. */
+  const paidKey=x=>String(x.raw.paid_on||(x.raw.marked_at||"").slice(0,10)||"");
+  const byPaid=(a,b)=>{ const ka=paidKey(a), kb=paidKey(b); if(!ka&&!kb) return String(b.date||"").localeCompare(String(a.date||"")); if(!ka) return 1; if(!kb) return -1; return kb.localeCompare(ka)||String(b.raw.marked_at||"").localeCompare(String(a.raw.marked_at||"")); };
   const list=(INVF==="check"?check:INVF==="paid"?paid:base).slice()
-    .sort(INVF==="check"?byRun:((a,b)=>String(b.date||b.raw.created_at||"").localeCompare(String(a.date||a.raw.created_at||""))));
+    .sort(INVF==="check"?byRun:INVF==="paid"?byPaid:((a,b)=>String(b.date||b.raw.created_at||"").localeCompare(String(a.date||a.raw.created_at||""))));
   if(!list.length) return h+`<div class="rows"><div class="empty">Nothing here${q?" for “"+esc(INVQ)+"”":""}.</div></div>`;
   h+=invTable(list);
   if(list.length>400) h+=`<p class="hint">Showing the first 400 of ${list.length}. Search to narrow it down.</p>`;
