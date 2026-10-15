@@ -4197,7 +4197,7 @@ function invAmt(x){
 function invStatus(x){
   const r=x.raw;
   if(x.st==="notify"){ const pend=invPopPending(r); return `<span class="chip orange">paid · to send</span><div class="tiny faint">${pend.map(a=>a==="manager"?"manager":"supplier").join(" and ")} not told yet</div>`; }
-  if(r.status==="paid") return `<span class="chip good">paid${r.paid_source==="xero"?" · Xero":""}</span><div class="tiny faint">${[r.paid_on?dshort(r.paid_on):"",r.paid_by?"by "+esc(r.paid_by):"",!r.paid_on&&!r.paid_by&&r.marked_by?esc(r.marked_by):""].filter(Boolean).join(" · ")}</div>`;
+  if(r.status==="paid") return `<span class="chip good">paid${r.paid_source==="xero"?" · Xero":r.paid_source==="revolut"?" · Revolut":""}</span><div class="tiny faint">${[r.paid_on?dshort(r.paid_on):"",r.paid_by?"by "+esc(r.paid_by):"",!r.paid_on&&!r.paid_by&&r.marked_by?esc(r.marked_by):""].filter(Boolean).join(" · ")}</div>`;
   if(r.status==="query") return `<span class="chip warn">query</span>`;
   const p=x.pay;
   const needs=(!invApproved(r)?`<div class="tiny" style="color:var(--warn)">needs approval</div>`:"")
