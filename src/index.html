@@ -3541,7 +3541,7 @@ function poAutoTable(list){
       <td class="r"><div class="inv-acts">${p.card?`<button class="btn small primary" data-act="po-ok" data-id="${p.id}">Looks right</button>`:""}<button class="btn small ${p.card?"":"primary"}" data-act="po-edit" data-id="${p.id}">${p.card?"Edit":"Set card"}</button><button class="btn small" data-act="po-code" data-id="${p.id}">Xero coding</button>${p.fin_file_state==="saved"?`<button class="btn small" data-act="po-rdl" data-id="${p.id}">Receipt</button>`:""}</div></td></tr>`;
   }).join("")+`</tbody></table></div>`;
 }
-function poUnmatched(){ return (D.poReceipts||[]).filter(r=>!r.po_id&&!r.dismissed); }
+function poUnmatched(){ return (D.poReceipts||[]).filter(r=>!r.po_id&&!r.dismissed&&!r.bank_txn_id); }
 function poCardOpen(){ return (D.poCard||[]); }
 function poReceiptsTable(list){
   return `<div class="tablewrap"><table class="pr-t inv-t"><thead><tr><th>From</th><th>Subject</th><th>Date</th><th class="r">Amount</th><th></th></tr></thead><tbody>`+list.map(r=>`<tr>
@@ -3552,11 +3552,24 @@ function poReceiptsTable(list){
     <td class="r"><div class="inv-acts"><button class="btn small primary" data-act="por-link" data-id="${r.id}">Attach to PO</button><button class="btn small" data-act="por-new" data-id="${r.id}">Raise PO</button>${r.file_state==="saved"?`<button class="btn small" data-act="por-dl" data-id="${r.id}">Receipt</button>`:`<a class="btn small" href="https://mail.google.com/mail/u/0/#all/${esc(r.email_message_id)}" target="_blank" rel="noopener">Email</a>`}<button class="btn small" data-act="por-skip" data-id="${r.id}">Not a card receipt</button></div></td></tr>`).join("")+`</tbody></table></div>`;
 }
 function poCardTable(list){
-  return `<div class="tablewrap"><table class="pr-t inv-t"><thead><tr><th>Date</th><th>Merchant</th><th>Card</th><th class="r">Amount</th><th></th></tr></thead><tbody>`+list.slice().sort((a,b)=>String(b.txn_date).localeCompare(String(a.txn_date))).map(t=>`<tr>
+  return `<div class="tablewrap"><table class="pr-t inv-t"><thead><tr><th>Date</th><th>Merchant</th><th>Card</th><th class="r">Amount</th><th>Receipt</th><th></th></tr></thead><tbody>`+list.slice().sort((a,b)=>String(b.txn_date).localeCompare(String(a.txn_date))).map(t=>`<tr>
     <td class="tiny">${d(t.txn_date)}</td><td><b>${esc(t.merchant||"")}</b>${t.description&&t.description!==t.merchant?`<div class="tiny faint">${esc(t.description)}</div>`:""}</td>
     <td class="small">${esc(t.source==="capital_on_tap"?"Capital on Tap":"Revolut "+(t.account||""))}${t.initiated_by?`<div class="tiny faint">${esc(t.initiated_by)}</div>`:""}</td>
     <td class="r"><span class="num">${money2(t.amount,t.ccy||"GBP")}</span>${t.ccy&&t.ccy!=="GBP"&&t.amount_gbp!=null?`<div class="tiny faint">${money2(t.amount_gbp,"GBP")}</div>`:""}</td>
+    <td class="small">${poCardReceipt(t)}</td>
     <td class="r"><div class="inv-acts"><button class="btn small primary" data-act="poc-new" data-id="${t.id}">Raise PO</button><button class="btn small" data-act="poc-link" data-id="${t.id}">Link to a PO</button><button class="btn small" data-act="poc-skip" data-id="${t.id}">No PO needed</button></div></td></tr>`).join("")+`</tbody></table></div>`;
+}
+function poCardReceipt(t){
+  if(t.rcpt_id){
+    const slack=String(t.rcpt_message_id||"").startsWith("slack:");
+    const where=slack?"Slack":"Gmail";
+    const btn=t.rcpt_file_state==="saved"?`<button class="btn small" data-act="por-dl" data-id="${t.rcpt_id}">Open</button>`
+      :slack?(t.rcpt_source_url?`<a class="btn small" href="${esc(t.rcpt_source_url)}" target="_blank" rel="noopener">Open in Slack</a>`:"")
+      :`<a class="btn small" href="https://mail.google.com/mail/u/0/#all/${esc(t.rcpt_message_id)}" target="_blank" rel="noopener">Open email</a>`;
+    return `<span class="chip good">Found in ${where}</span>${t.rcpt_subject?`<div class="tiny faint">${esc(t.rcpt_subject)}</div>`:""}<div style="margin-top:4px">${btn}</div>`;
+  }
+  if(t.hunt_at) return `<span class="faint">Not found yet</span><div class="tiny faint">Looked in Gmail and Slack ${d(String(t.hunt_at).slice(0,10))}</div>`;
+  return `<span class="faint">Looking…</span>`;
 }
 function poTodoCount(){
   try{ const all=poAll(); const st=s=>all.filter(p=>p.stage===s);
@@ -3595,7 +3608,7 @@ function vOrders(){
     h+=poSection("Queried","is-nodue",query,"Queried differences. Approve once it's sorted.");
     h+=poSection("Receipt missing","is-fri",missing,"Bought, but no receipt yet. Drop it on the row, press Add receipt, or remind the manager.");
     h+=poSection("Receipts at finance@ with no PO","is-later",unmatched,"These arrived at finance@ but didn't match a PO. Attach each to its PO, raise a PO for it, or mark it not a card receipt.",poReceiptsTable(unmatched));
-    h+=poSection("Card charges with no PO","is-later",cards,`Card spend from the bank statements since ${d(PO_START)} that isn't on a PO. Raise one after the fact, link it to an existing PO, or mark it as not needing one (subscriptions, fees).`,poCardTable(cards));
+    h+=poSection("Card charges with no PO","is-later",cards,`Card spend from the bank statements since ${d(PO_START)} that isn't on a PO. Receipts are found automatically in Gmail and Slack every two hours; once one is found a PO is raised from it and the charge moves up to "Created from receipts". Otherwise raise a PO, link it to an existing one, or mark it as not needing one (subscriptions, fees).`,poCardTable(cards));
     h+=poSection("Ready to order","is-nodue",toOrder,"POs raised, not bought yet. Press Ordered once it's on the card.");
     return h;
   }
@@ -4049,7 +4062,7 @@ function poHow(){
       <li><b>No receipt?</b> Remind manager emails the PO's manager (or the job lead) from your Gmail, after you confirm. It's logged on the PO.</li>
       <li><b>No PO? Still covered.</b> Receipts for company-card purchases that land in your inbox or at finance@ with no matching PO get a PO raised automatically (card worked out from the last 4 digits on the receipt). They sit under "Created from receipts: check" for two hours, then go into Xero on their own.</li>
       <li><b>Into Xero, automatically.</b> When a PO is finished (receipt in, any difference approved) it goes into Xero within 5 minutes as spend money on the card's account, coded from the PO's category, with the receipt attached. When the card line arrives on the bank feed, Xero suggests the match: just press OK.</li>
-      <li><b>Card charges with no PO</b> are picked up from the bank statements (Capital on Tap and Revolut cards) from ${d(PO_START)}. Raise a PO after the fact, link it, or mark it as not needing one.</li>
+      <li><b>Card charges with no PO</b> are picked up from the bank statements (Capital on Tap and Revolut cards) from ${d(PO_START)}. HAUS HQ looks for each one's receipt in Gmail and Slack every two hours and attaches it; a found receipt raises its PO automatically. Otherwise raise a PO after the fact, link it, or mark it as not needing one.</li>
     </ol>`);
 }
 document.addEventListener("click", async e=>{
