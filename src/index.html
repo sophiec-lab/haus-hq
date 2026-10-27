@@ -436,6 +436,8 @@ tr.inv-urgent td:first-child{box-shadow:inset 3px 0 0 var(--flare)}
 .inv-hbtns{margin-left:auto;display:inline-flex;gap:6px;flex-wrap:wrap}
 .inv-sel{font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--ink);max-width:220px}
 .inv-ticks{display:flex;gap:4px;flex-wrap:wrap}
+.pr-split{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:13px}.pr-split .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-right:4px}
+.pr-exp{width:90px;text-align:right}
 .inv-tick{font:inherit;font-size:11px;border:1px dashed var(--border-strong);background:transparent;color:var(--ink-faint);border-radius:999px;padding:2px 8px;cursor:pointer;white-space:nowrap}
 .inv-tick.locked{opacity:.55;cursor:not-allowed}
 .inv-tick.on{border-style:solid;border-color:var(--good);color:var(--good);background:var(--good-soft)}
@@ -2615,8 +2617,8 @@ document.addEventListener("change", async e=>{
     const { error } = await sb.rpc("haus_contractor_line", args);
     if(error){ toast("Not saved: "+error.message); return; }
     if(f==="person"){ await loadAll(); render(); toast("Assigned"); return; }
-    if(row){ if(f==="fee") row.fee_amount=args.p_fee; else row.expenses_amount=args.p_expenses; if(row.ccy==="GBP"){ row.fee_gbp=row.fee_amount; row.expenses_gbp=row.expenses_amount; } }
-    toast("Split saved"); return;
+    { const { data } = await fetchAll("haus_contractor_invoices","bill_date"); if(data) D.ci=data; }
+    render(); toast("Split saved: fee and expenses updated"); return;
   }
   if(t && t.dataset && t.dataset.ob){
     const id=t.dataset.id, f=t.dataset.ob;
@@ -3164,6 +3166,9 @@ function prSection(r){
 }
 function prMonthRows(m){ return (D.payroll||[]).filter(r=>r.month_start===m); }
 function prCi(r){ return r.invoice_id ? (D.ci||[]).find(x=>x.id===r.invoice_id) : null; }
+/* Staff invoices are split into fee (their time) and expenses (reimbursed costs). The two always add up to the total. */
+function ciFee(c){ if(!c) return null; return c.fee_amount!=null?Number(c.fee_amount):(Number(c.total)||0)-(Number(c.expenses_amount)||0); }
+function ciExp(c){ if(!c) return null; return Number(c.expenses_amount)||0; }
 function prMonthEnd(m){ const t=new Date(m+"T00:00:00"); return isoLocal(new Date(t.getFullYear(), t.getMonth()+1, 0)); }
 function prAddTotal(tot, ccy, amt){ if(amt==null||isNaN(Number(amt))) return; const k=ccy||"?"; tot[k]=(tot[k]||0)+Number(amt); }
 function prTotals(tot){
@@ -3173,13 +3178,15 @@ function prTotals(tot){
 
 function prDiff(r){
   const exp=r.expected_amount==null?null:Number(r.expected_amount);
-  const inv=r.invoice_total==null?null:Number(r.invoice_total);
-  if(inv==null) return `<span class="faint">&mdash;</span>`;
+  const ci=prCi(r), tot=r.invoice_total==null?null:Number(r.invoice_total);
+  if(tot==null) return `<span class="faint">&mdash;</span>`;
+  /* compare the fee with the expected amount; an expected amount that already includes regular expenses still matches on the total */
+  const inv=(ci && exp!=null && Math.abs(tot-exp)>=0.005) ? ciFee(ci) : tot;
   if(exp==null) return `<span class="chip warn">no expected amount</span>`;
   if((r.expected_ccy||"")!==(r.invoice_ccy||"")) return `<span class="chip bad">different currency</span><div class="tiny faint">expected ${esc(r.expected_ccy||"?")}, invoiced ${esc(r.invoice_ccy||"?")}</div>`;
   const dv=Math.round((inv-exp)*100)/100;
   if(Math.abs(dv)<0.005) return `<span class="chip good">matches</span>`;
-  return `<b class="num" style="color:var(--flare)">${dv>0?"+":"&minus;"}${money2(Math.abs(dv),r.invoice_ccy)}</b><div class="tiny faint">${dv>0?"over":"under"} expected</div>`;
+  return `<b class="num" style="color:var(--flare)">${dv>0?"+":"&minus;"}${money2(Math.abs(dv),r.invoice_ccy)}</b><div class="tiny faint">fee ${dv>0?"over":"under"} expected</div>`;
 }
 /* Payment day: the 28th, or the Friday before when the 28th is a Saturday or Sunday. */
 function prPayday(m){ const t=new Date(m+"T00:00:00"), d=new Date(t.getFullYear(),t.getMonth(),28), w=d.getDay(); if(w===6) d.setDate(27); if(w===0) d.setDate(26); return isoLocal(d); }
@@ -3294,8 +3301,11 @@ function prRow(r, kind){
   if(kind==="chase") tds=`<td>${who}</td><td class="r">${exp}</td><td>${late}</td><td>${prAllocSummary(r)}</td>`;
   else if(kind==="quiet") tds=`<td>${who}</td><td class="r">${exp}</td><td class="tiny faint">${esc(r.payroll_status||"")}</td><td>${prAllocSummary(r)}</td>`;
   else if(kind==="check") tds=`<td>${who}</td><td class="r">${exp}</td><td class="r">${inv}</td><td>${ref}</td><td>${r.invoice_id?prStatus(r):`<span class="chip warn">${esc(r.payroll_status||"check")}</span>`}${r.match_detail?`<div class="tiny faint">${esc(r.match_detail)}</div>`:""}</td><td>${prAllocSummary(r)}</td>`;
-  else tds=`<td>${who}</td><td class="r">${exp}</td><td class="r">${inv}</td><td class="r">${prDiff(r)}</td><td>${ref}</td>
-    <td>${prStatus(r)}${prXero(r)}<div class="pr-btns">${prActions(r)}</div></td><td>${prInvoiceLink(r)}</td><td>${prAllocSummary(r)}</td><td>${prPaidTick(r)}</td>`;
+  else { const ci=prCi(r), cc=r.invoice_ccy||(ci&&ci.ccy)||"GBP";
+    const feeTd=ci?`<span class="num">${money2(ciFee(ci),cc)}</span>`:`<span class="faint">&mdash;</span>`;
+    const expTd=ci?`<input class="wm-in num pr-exp" data-ci="exp" data-id="${ci.id}" value="${ciExp(ci).toFixed(2)}" inputmode="decimal" aria-label="Expenses on this invoice" title="Expenses on this invoice. The fee is the rest of the total.">`:`<span class="faint">&mdash;</span>`;
+    tds=`<td>${who}</td><td class="r">${exp}</td><td class="r">${inv}</td><td class="r">${feeTd}</td><td class="r">${expTd}</td><td class="r">${prDiff(r)}</td><td>${ref}</td>
+    <td>${prStatus(r)}${prXero(r)}<div class="pr-btns">${prActions(r)}</div></td><td>${prInvoiceLink(r)}</td><td>${prAllocSummary(r)}</td><td>${prPaidTick(r)}</td>`; }
   const cols=(tds.match(/<td/g)||[]).length;
   return `<tr>${tds}</tr>` + (PAYALLOC.has(r.person_label)?prAllocEditor(r, cols):"");
 }
@@ -3317,6 +3327,8 @@ function vStaffCost(){
   const totInv={}, totOut={}, totPaid={}, totChase={};
   toPay.filter(r=>r.invoice_id).forEach(r=>{ prAddTotal(totInv,r.invoice_ccy,r.invoice_total); prAddTotal(r.approval_status==="paid"?totPaid:totOut,r.invoice_ccy,r.invoice_total); });
   chase.forEach(r=>prAddTotal(totChase,r.expected_ccy,r.expected_amount));
+  const totFee={}, totExp={};
+  toPay.filter(r=>r.invoice_id).forEach(r=>{ const ci=prCi(r); if(!ci) return; prAddTotal(totFee,r.invoice_ccy||ci.ccy,ciFee(ci)); prAddTotal(totExp,r.invoice_ccy||ci.ccy,ciExp(ci)); });
   const needApproval=toPay.filter(r=>r.approval_status==="pending"||r.approval_status==="on_hold").length;
   const noAlloc=rows.filter(r=>r.invoice_id && !(Number(r.allocated_pct)>0) && !(D.staffAlloc||[]).some(a=>a.person_label===r.person_label&&a.month_start===r.month_start)).length;
 
@@ -3342,15 +3354,17 @@ function vStaffCost(){
   const payLine=anyOut?(pn===0?`<span class="chip bad">pay today</span>`:pn>0?`<span class="chip ${pn<=3?"warn":""}">due in ${pn} day${pn===1?"":"s"}</span>`:`<span class="chip bad">${-pn} day${pn===-1?"":"s"} overdue</span>`):"";
   h+=`<div class="pr-sum ${anyOut?"":"done"}"><div class="pr-sum-top"><div class="lab">${anyOut?"Still to pay":"All paid"}</div><div class="pr-pay">Payment day <b>${new Date(pay+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}</b> ${payLine}</div></div>
     <div class="val pr-val">${anyOut?prTotals(totOut):prTotals(totPaid)}</div>
-    <div class="sub">${nInv} invoice${nInv===1?"":"s"} in${anyPaid&&anyOut?" · paid so far "+Object.keys(totPaid).sort().map(k=>money2(totPaid[k],k)).join(" + "):""} · per currency, not converted</div></div>`;
+    <div class="sub">${nInv} invoice${nInv===1?"":"s"} in${anyPaid&&anyOut?" · paid so far "+Object.keys(totPaid).sort().map(k=>money2(totPaid[k],k)).join(" + "):""} · per currency, not converted</div>
+    ${Object.keys(totFee).length?(()=>{ const j=t=>{ const ks=Object.keys(t).filter(k=>Math.abs(t[k])>=0.005).sort(); return ks.length?ks.map(k=>money2(t[k],k)).join(" + "):"none"; };
+      return `<div class="pr-split"><div><span class="lab">Fees</span> <span class="num">${j(totFee)}</span></div><div><span class="lab">Expenses</span> <span class="num">${j(totExp)}</span></div></div>`; })():""}</div>`;
   const alerts=[];
   if(needApproval) alerts.push(`<span class="chip warn">${needApproval} to approve</span> approve before paying`);
   if(chase.length) alerts.push(`<span class="chip bad">${chase.length} invoice${chase.length===1?"":"s"} not received</span> ${esc(chase.map(r=>r.tracker_label||r.person_label).join(", "))}, ${Object.keys(totChase).sort().map(k=>money2(totChase[k],k)).join(" + ")} expected`);
   if(noAlloc) alerts.push(`<span class="chip warn">${noAlloc} not allocated</span> click <b>not allocated</b> on a row to split it`);
   if(alerts.length) h+=`<div class="pr-alerts">${alerts.map(x=>`<div>${x}</div>`).join("")}</div>`;
   h+=`<h2 class="sec">To pay <span class="aside">${toPay.length}</span></h2>`;
-  h+=`<p class="hint">Everyone we pay each month (retainers) is listed, with or without an invoice. Freelancers appear here once they invoice.</p>`;
-  h+= toPay.length ? `<div class="tablewrap"><table class="pr-t"><thead><tr><th>Person</th><th class="r">Expected</th><th class="r">Invoiced</th><th class="r">Difference</th><th>Invoice</th><th>Status</th><th>PDF</th><th>Allocation</th><th>Paid</th></tr></thead><tbody>`
+  h+=`<p class="hint">Everyone we pay each month (retainers) is listed, with or without an invoice. Freelancers appear here once they invoice. <b>Fee</b> is what they charged for their time, <b>Expenses</b> is what HAUS is reimbursing; type the expenses on an invoice and the fee becomes the rest of the total.</p>`;
+  h+= toPay.length ? `<div class="tablewrap"><table class="pr-t"><thead><tr><th>Person</th><th class="r">Expected</th><th class="r">Invoiced</th><th class="r">Fee</th><th class="r">Expenses</th><th class="r">Fee vs expected</th><th>Invoice</th><th>Status</th><th>PDF</th><th>Allocation</th><th>Paid</th></tr></thead><tbody>`
       + toPay.map(r=>prRow(r,"to pay")).join("") + `</tbody></table></div>`
     : `<div class="rows"><div class="empty">Nobody on retainer and no invoices in for ${monthLong(PAYMONTH)} yet.</div></div>`;
 
@@ -4757,12 +4771,13 @@ function prPersonView(name){
   const alloc=(D.staffAlloc||[]).filter(a=>a.person_label===name);
   const pay=(D.payroll||[]).filter(r=>r.person_label===name).sort(by("month_start",-1));
   const cur=pay[0]||{};
-  const T={all:{},paid:{},hq:{},open:{},y12:{},ytd:{}};
+  const T={all:{},paid:{},hq:{},open:{},y12:{},ytd:{},fee:{},exp:{},fee12:{},exp12:{}};
   const cut12=isoLocal(new Date(TODAY.getFullYear()-1,TODAY.getMonth()+1,1)), ytd=TODAY.getFullYear()+"-01-01";
   let nRej=0;
   inv.forEach(r=>{ const st=prPayState(r), c=r.ccy||"?", t=Number(r.total)||0, m=r.period_month||r.bill_date||"";
     if(st==="rejected"){ nRej++; return; }
-    prAddTotal(T.all,c,t); prAddTotal(T[st],c,t); if(m>=cut12) prAddTotal(T.y12,c,t); if(m>=ytd) prAddTotal(T.ytd,c,t); });
+    prAddTotal(T.all,c,t); prAddTotal(T[st],c,t); if(m>=cut12) prAddTotal(T.y12,c,t); if(m>=ytd) prAddTotal(T.ytd,c,t);
+    prAddTotal(T.fee,c,ciFee(r)); prAddTotal(T.exp,c,ciExp(r)); if(m>=cut12){ prAddTotal(T.fee12,c,ciFee(r)); prAddTotal(T.exp12,c,ciExp(r)); } });
   // cost by job: invoice total x allocation %, per currency
   const jobs={}, unalloc={};
   inv.filter(r=>prPayState(r)!=="rejected"&&r.period_month).forEach(r=>{
@@ -4783,6 +4798,8 @@ function prPersonView(name){
         const hq=Object.keys(T.hq).sort().map(k=>money2(T.hq[k],k)).join(" + ");
         return box("Paid",P,hq?`of which ${hq} not in Xero yet`:"all confirmed in Xero","good"); })()
     + box("Still to pay",T.open,Object.keys(T.open).length?"approved or pending":"nothing outstanding",Object.keys(T.open).length?"warn":"good")
+    + box("Fees, all time",T.fee,Object.keys(T.fee12).length?"last 12 months "+Object.keys(T.fee12).sort().map(k=>money2(T.fee12[k],k)).join(" + "):"none in the last 12 months")
+    + box("Expenses, all time",T.exp,Object.keys(T.exp12).some(k=>T.exp12[k]>0)?"last 12 months "+Object.keys(T.exp12).sort().map(k=>money2(T.exp12[k],k)).join(" + "):"none in the last 12 months")
     + `</div>`;
   h+=`<p class="hint" style="margin-top:10px">Last 12 months: <span>${prTotals(T.y12)}</span> · this year: <span>${prTotals(T.ytd)}</span></p>`;
   const jk=Object.keys(jobs).sort((a,b)=>Object.values(jobs[b].tot).reduce((x,y)=>x+y,0)-Object.values(jobs[a].tot).reduce((x,y)=>x+y,0));
@@ -4792,7 +4809,7 @@ function prPersonView(name){
       + (Object.keys(unalloc).length?`<tr><td><span class="chip warn">not allocated</span></td><td class="r">${prTotals(unalloc)}</td></tr>`:"")
       + `</tbody></table></div>` : `<div class="rows"><div class="empty">No invoices to split yet.</div></div>`;
   if(allocNoInv.length) h+=`<p class="hint" style="margin-top:8px">Allocated but no invoice on the board: ${allocNoInv.map(m=>monthLabel(m)).join(", ")}. Their cost is missing from the totals above.</p>`;
-  h+=`<h2 class="sec">Month by month <span class="aside">${inv.length}</span></h2><div class="tablewrap"><table class="pr-t"><thead><tr><th>Month</th><th>Invoice</th><th class="r">Amount</th><th>Status</th><th>Allocation</th><th>PDF</th></tr></thead><tbody>`
+  h+=`<h2 class="sec">Month by month <span class="aside">${inv.length}</span></h2><div class="tablewrap"><table class="pr-t"><thead><tr><th>Month</th><th>Invoice</th><th class="r">Amount</th><th class="r">Fee</th><th class="r">Expenses</th><th>Status</th><th>Allocation</th><th>PDF</th></tr></thead><tbody>`
     + inv.map(r=>{ const st=prPayState(r), m=r.period_month;
         const ls=alloc.filter(a=>a.month_start===m).sort((a,b)=>(Number(b.pct)||0)-(Number(a.pct)||0));
         const chip=st==="paid"?`<span class="chip good">paid</span><div class="tiny faint">${r.paid_on?dshort(r.paid_on):""} · Xero</div>`
@@ -4801,7 +4818,7 @@ function prPersonView(name){
           :`<span class="chip ${r.approval_status==="approved"?"orange":"warn"}">${esc(r.approval_status||"pending")}</span>`;
         return `<tr><td><b>${m?monthLabel(m):d(r.bill_date)}</b></td>
           <td class="small">${esc(r.bill_number||"no number")}${r.project_hint?`<div class="tiny faint">${esc(r.project_hint)}</div>`:""}</td>
-          <td class="r"><span class="num">${money2(r.total,r.ccy)}</span></td><td>${chip}</td>
+          <td class="r"><span class="num">${money2(r.total,r.ccy)}</span></td><td class="r"><span class="num">${money2(ciFee(r),r.ccy)}</span></td><td class="r"><input class="wm-in num pr-exp" data-ci="exp" data-id="${r.id}" value="${ciExp(r).toFixed(2)}" inputmode="decimal" aria-label="Expenses on this invoice"></td><td>${chip}</td>
           <td>${ls.length?`<div class="pr-alloc-list">${ls.map(a=>`<span>${esc(prJobName(a))} ${a.pct!=null?num(a.pct)+"%":money2(a.amount,r.ccy)}</span>`).join("")}</div>`:`<span class="tiny faint">not allocated</span>`}</td>
           <td>${r.attachment_url?`<a class="btn small" href="${esc(r.attachment_url)}" target="_blank" rel="noopener">Download</a>`:`<span class="faint">&mdash;</span>`}</td></tr>`;
       }).join("") + `</tbody></table></div>`;
