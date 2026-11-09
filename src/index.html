@@ -3215,7 +3215,7 @@ function prActions(r){
 }
 function prInvoiceLink(r){
   const ci=prCi(r);
-  if(ci && ci.attachment_url) return `<a class="btn small" href="${esc(ci.attachment_url)}" target="_blank" rel="noopener" download>Download</a><div class="tiny faint">${esc(r.attachment_name||"invoice")}</div>`;
+  if(ci && invDownload(ci)) return `<a class="btn small" href="${esc(invDownload(ci))}" target="_blank" rel="noopener">Download</a><div class="tiny faint">${esc(r.attachment_name||"invoice")}</div>`;
   const gid=r.email_message_id?String(r.email_message_id).split(":")[0]:"";
   if(gid) return `<a class="btn small" href="https://mail.google.com/mail/?authuser=${encodeURIComponent((ME&&ME.email)||"")}#all/${encodeURIComponent(gid)}" target="_blank" rel="noopener" title="The PDF is not stored in HAUS HQ yet, so this opens the email it came in">Open email</a><div class="tiny faint">${esc(r.attachment_name||"attachment")}</div>`;
   return r.attachment_name?`<span class="tiny faint">${esc(r.attachment_name)}</span>`:`<span class="faint">&mdash;</span>`;
@@ -4842,7 +4842,7 @@ function prPersonView(name){
           <td class="small">${esc(r.bill_number||"no number")}${r.project_hint?`<div class="tiny faint">${esc(r.project_hint)}</div>`:""}</td>
           <td class="r"><span class="num">${money2(r.total,r.ccy)}</span></td><td class="r"><span class="num">${money2(ciFee(r),r.ccy)}</span></td><td class="r"><input class="wm-in num pr-exp" data-ci="exp" data-id="${r.id}" value="${ciExp(r).toFixed(2)}" inputmode="decimal" aria-label="Expenses on this invoice"></td><td>${chip}</td>
           <td>${ls.length?`<div class="pr-alloc-list">${ls.map(a=>`<span>${esc(prJobName(a))} ${a.pct!=null?num(a.pct)+"%":money2(a.amount,r.ccy)}</span>`).join("")}</div>`:`<span class="tiny faint">not allocated</span>`}</td>
-          <td>${r.attachment_url?`<a class="btn small" href="${esc(r.attachment_url)}" target="_blank" rel="noopener">Download</a>`:`<span class="faint">&mdash;</span>`}</td></tr>`;
+          <td>${invDownload(r)?`<a class="btn small" href="${esc(invDownload(r))}" target="_blank" rel="noopener">Download</a>`:`<span class="faint">&mdash;</span>`}</td></tr>`;
       }).join("") + `</tbody></table></div>`;
   return h+`</div>`;
 }
