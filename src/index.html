@@ -4295,6 +4295,7 @@ function invActions(x){
     const ob=aud=>(D.outbox||[]).find(o=>o.kind==="pop"&&o.received_invoice_id===r.id&&o.audience===aud);
     const bt=(aud,lab,done)=>{ const o=ob(aud), sent=o&&o.status==="sent", skip=o&&o.status==="dismissed", ready=o&&o.gmail_state==="drafted", sending=o&&o.gmail_state==="send_requested"; return `<button class="btn small ${sent||skip?"":"primary"}" data-act="ri-pop" data-aud="${aud}" data-id="${r.id}">${sent?"&#10003; "+done:skip?lab+" (not needed)":sending?lab+" · sending":ready?lab+" · draft ready":lab}</button>`; };
     L.push(bt("manager","Send to manager","Manager told")+bt("supplier","Email supplier","Supplier emailed"));
+    if(invPopPending(r).length) L.push(`<button class="btn small" data-act="ri-popskip" data-id="${r.id}" title="Moves it to Paid without emailing anyone. Any draft already in Gmail stays there unsent.">Move to Paid, don't send</button>`);
   }
   else if(r.remittance_link && /^https?:\/\//.test(r.remittance_link)) L.push(`<a class="btn small" href="${esc(r.remittance_link)}" target="_blank" rel="noopener">Remittance</a>`);
   else if(r.status==="paid") L.push(`<button class="btn small" data-act="ri-rem" data-id="${r.id}">Add confirmation</button>`);
@@ -4691,6 +4692,27 @@ document.addEventListener("click", async e=>{
   else if(a==="ri-xero"){ const { error } = await sb.rpc("haus_received_invoice_xero",{p_id:id,p_action:"queue"}); if(error){ toast(error.message); return; } await riReload("Going to Revolut within 5 minutes"); }
   else if(a==="ri-dupok"){ const { error } = await sb.rpc("haus_received_invoice_dup_ok",{p_id:id,p_value:true}); if(error){ toast(error.message); return; } await riReload("Marked as not a duplicate"); }
   else if(a==="ri-pop"){ await riPop(id,b.dataset.aud); }
+  else if(a==="ri-popskip"){
+    /* Mark both confirmations not needed in one go, so a paid invoice can leave
+       "Paid: send the confirmation" without emailing the manager or supplier. */
+    b.disabled=true;
+    const r=(D.received||[]).find(x=>x.id===id); if(!r){ b.disabled=false; return; }
+    const pend=invPopPending(r);
+    if(pend.some(aud=>!(D.outbox||[]).some(o=>o.kind==="pop"&&o.received_invoice_id===id&&o.audience===aud))){
+      const { error } = await sb.rpc("haus_received_invoice_pop_drafts",{p_id:id});
+      if(error){ toast("Not moved: "+error.message); b.disabled=false; return; }
+      await riReloadOutbox();
+    }
+    for(const aud of pend){
+      const o=(D.outbox||[]).find(x=>x.kind==="pop"&&x.received_invoice_id===id&&x.audience===aud);
+      if(!o) continue;
+      if(o.gmail_state==="send_requested") await sb.rpc("haus_pop_gmail",{p_id:o.id,p_action:"cancel",p_data:null});
+      const { error } = await sb.rpc("haus_outbox_mark",{p_id:o.id,p_status:"dismissed"});
+      if(error){ toast("Not moved: "+error.message); b.disabled=false; return; }
+    }
+    await riReloadOutbox(); render(); renderTabs();
+    toast("Moved to Paid. Nothing was sent.");
+  }
   else if(["pop-copy","pop-sent","pop-back","pop-skip","pop-draft","pop-send","pop-cancel"].includes(a)){ await riPopAct(a,b.dataset.id); }
   else if(a==="ri-apprall"){
     const r=(D.received||[]).find(x=>x.id===id); if(!r) return;
