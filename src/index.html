@@ -1194,7 +1194,10 @@ window.addEventListener("hashchange",()=>{ const h=location.hash.replace("#","")
 function render(){
   if(ordersOnly() && TAB!=="orders") TAB="orders";
   const f = VIEWS[TAB] || VIEWS.overview;
+  /* Keep the cursor in a search box when a background refresh redraws the page. */
+  const ae=document.activeElement, keep=ae&&(ae.id==="invQ"||ae.id==="poQ")?{id:ae.id,s:ae.selectionStart,e:ae.selectionEnd}:null;
   el("panel").innerHTML = f();
+  if(keep){ const n=el(keep.id); if(n){ n.focus(); try{ n.setSelectionRange(keep.s,keep.e); }catch(err){} } }
   { const ft=document.querySelector("footer.note"); if(ft) ft.style.display = (TAB==="invoices"||TAB==="orders") ? "none" : ""; }
   const s = D.snapshot;
   el("asOfLine").innerHTML = s
@@ -4381,6 +4384,13 @@ function vInvoices(){
     if(stuck.length) h+=`<div class="row" style="border-left:3px solid var(--flare);margin:12px 0"><b>Your Gmail script seems to have stopped.</b> <span class="small">${stuck.length} email${stuck.length===1?" has":"s have"} waited over 20 minutes. Open the Apps Script "HAUS HQ invoice PDFs", check Triggers shows popEmails every 5 minutes, or run setup() again.</span></div>`;
     if(errs.length) h+=`<div class="row" style="border-left:3px solid var(--flare);margin:12px 0"><b>${errs.length} payment email${errs.length===1?"":"s"} hit a Gmail problem.</b> <span class="small">${errs.map(o=>esc(o.party||"")).join(", ")}: open it from the invoice and press Put in Gmail again.</span></div>`; }
   h+=`<p class="hint" style="margin-top:12px">Supplier invoices only. Suppliers email them to finance@haus-events.co.uk, or add one by hand. Staff and freelancer invoices are on <button class="linkbtn" data-act="go" data-tab="cost">Staff cost</button>. Payment runs are every Friday: an invoice goes in the last run before it falls due. <b>Drop the bank's payment confirmation onto an invoice</b> to mark it paid and keep a copy.</p>`;
+  if(q){
+    /* Searching: show every match whatever tab is selected, newest first, so nothing hides on another tab. */
+    const hits=base.slice().sort((a,b)=>String(b.date||b.raw.created_at||"").localeCompare(String(a.date||a.raw.created_at||"")));
+    h+=`<p class="hint" style="margin-top:4px">Showing all ${hits.length} invoice${hits.length===1?"":"s"} matching “${esc(INVQ)}”, whatever their status. Clear the search to go back to ${INVF==="topay"?"To pay":INVF==="check"?"Query":INVF==="paid"?"Paid":"All"}.</p>`;
+    if(!hits.length) return h+`<div class="rows"><div class="empty">No invoices match “${esc(INVQ)}”.</div></div>`;
+    return h+invTable(hits);
+  }
   if(INVF==="topay"){
     h+=invSection("Paid: send the confirmation","is-notify",notify.slice().sort((a,b)=>String(b.raw.remittance_at||"").localeCompare(String(a.raw.remittance_at||""))),"Payment confirmation added. Tell the manager and email the supplier (or mark it not needed), then it moves to Paid.");
     if(!topay.length) return h+(notify.length?"":`<div class="rows"><div class="empty">Nothing to pay${q?" for “"+esc(INVQ)+"”":""}.</div></div>`);
