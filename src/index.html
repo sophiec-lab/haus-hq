@@ -861,7 +861,7 @@ function vOutbox(){
   if(!canMoney()) return noAccess("The outbox is limited to owner and leadership accounts.");
   const all=(D.outbox||[]).filter(o=>o.kind!=="po_reminder");
   const open=all.filter(o=>o.status==="draft"||o.status==="opened").sort((a,b)=>((a.kind==="brief"?0:1)-(b.kind==="brief"?0:1)) || ((Number(b.amount_gbp)||0)-(Number(a.amount_gbp)||0)));
-  const done=all.filter(o=>o.status==="sent").sort((a,b)=>String(b.sent_at).localeCompare(String(a.sent_at))).slice(0,15);
+  const done=all.filter(o=>o.status==="sent").sort((a,b)=>String(b.sent_at).localeCompare(String(a.sent_at)));
   let h=`<h2 class="sec">Outbox <span class="aside">${open.length} to review</span><button class="btn" data-act="ob-gen">Draft now</button></h2>`;
   h+=`<p class="ob-hint">Every weekday at 6.30am HAUS HQ drafts the morning brief for both directors and a chaser for each client with overdue invoices. Nothing is sent from here. Edit the draft, press <b>Open in Gmail</b>, attach anything it asks for and press Send in Gmail. Then mark it sent here, which also marks the invoices as chased.</p>`;
   if(!open.length) h+=`<div class="ob-empty">Nothing waiting. Press Draft now to build today's brief and any chasers that are due.</div>`;
@@ -913,7 +913,7 @@ function contractorBlock(){
   const list=rows.filter(r=>!CIPERSON || (r.person_id||("x:"+(r.person_name||r.person_label||r.xero_contact)))===CIPERSON).sort((a,b)=>String(b.period_month||b.bill_date).localeCompare(String(a.period_month||a.bill_date)));
   h+=`<div class="ci-bar"><label for="ciPerson" class="tiny faint">Show</label> <select id="ciPerson">${opts}</select> <span class="tiny faint">${list.length} invoices</span></div>`;
   h+=`<div class="tablewrap wm"><table style="min-width:1050px"><thead><tr><th>Month</th><th>Person</th><th>Invoice</th><th class="num" style="width:120px">Fee</th><th class="num" style="width:120px">Expenses</th><th class="num">Total</th><th>Status</th><th>What it was for</th><th></th></tr></thead><tbody>`
-    +list.slice(0,300).map(r=>{
+    +list.map(r=>{
       const cc=r.ccy||"GBP";
       const what=(r.lines||[]).map(l=>`<div class="tiny"><span class="chip ${l.kind==="expenses"?"acc":""}">${l.kind==="expenses"?"exp":"fee"}</span> ${esc(l.description||"(no description)")} ${l.amount!=null?money2(l.amount,cc):""}</div>`).join("");
       const pSel=r.person_id?esc(r.person_name||""):`<select data-ci="person" data-id="${r.id}"><option value="">Assign to…</option>${people.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join("")}</select><div class="tiny faint">${esc(r.person_label||r.xero_contact||"")}</div>`;
@@ -3683,7 +3683,7 @@ function poActions(p){
 }
 function poTable(list){
   return `<div class="tablewrap"><table class="pr-t inv-t po-t"><thead><tr><th>PO</th><th>Supplier · what</th><th>Who</th><th class="r">PO amount</th><th>Receipt</th><th>Status</th><th></th></tr></thead><tbody>`
-   + list.slice(0,400).map(p=>{
+   + list.map(p=>{
       const job=p.project_id?`<button class="inv-job" data-act="po-edit" data-id="${p.id}" title="${esc(p.project_name||"")}">${esc(p.project_code||p.project_name||"Job")}</button>`:p.event_label?`<span class="tiny faint">${esc(p.event_label)}</span>`:`<button class="inv-job none" data-act="po-edit" data-id="${p.id}">+ Job</button>`;
       const rem=p.reminded_count?`<div class="tiny faint" title="Last by ${esc(p.reminded_by||"")}">reminded ${p.reminded_count}&times;, last ${dshort(String(p.reminded_at||"").slice(0,10))}</div>`:"";
       const err=p.reminder_error?`<div class="tiny" style="color:var(--flare)" title="${esc(p.reminder_error)}">reminder failed to send</div>`:"";
@@ -4477,7 +4477,7 @@ function invLastEdit(r){
 function invTable(list, opts){
   opts=opts||{};
   return `<div class="tablewrap"><table class="pr-t inv-t"><thead><tr><th>From</th><th>What</th><th>Date</th><th>Due</th><th class="r">Amount</th><th>Approved</th><th>${opts.payHead||"Status"}</th><th></th></tr></thead><tbody>`
-    + list.slice(0,400).map(x=>{
+    + list.map(x=>{
         const r=x.raw, dn=x.due?dAway(x.due):null;
         const fromTerms=r.due_from_terms&&r.payment_terms?`<div class="tiny faint" title="Worked out from the payment terms">from “${esc(r.payment_terms)}”</div>`:"";
         const due=!x.due?(r.payment_terms?`<span class="tiny">${esc(r.payment_terms)}</span>`:`<span class="faint">&mdash;</span>`):(x.st==="paid"||x.st==="notify")?`<span class="tiny">${dshort(x.due)}</span>`
