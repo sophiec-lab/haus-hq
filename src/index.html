@@ -1146,6 +1146,8 @@ function orCard(o){
   return `<div class="ob-card" id="or-${o.id}">
     <div class="ob-head"><span class="chip ${fu?"warn":"acc"}">${fu?"Follow-up":OR_SEG[o.segment]||"Outreach"}</span><b>${esc(o.company)}</b><span class="small">${esc([o.person,o.role].filter(Boolean).join(", "))}</span>${o.warm?`<span class="chip good">knows you</span>`:""}<span class="tiny faint">drafted ${o.draft_at?d(String(o.draft_at).slice(0,10)):""}</span></div>
     ${o.hook?`<div class="small muted" style="margin:6px 0 8px">${esc(o.hook)}</div>`:""}
+    ${o.creative_idea?`<div class="small" style="margin:0 0 8px"><b>Idea:</b> ${esc(o.creative_idea)}</div>`:""}
+    ${o.visual_state==="saved"&&o.visual_path&&!fu?`<div class="or-vis" style="margin:0 0 10px"><img data-or-vis="${esc(o.visual_path)}" alt="${esc(o.visual_caption||"Stand concept")}" style="width:100%;max-width:640px;border-radius:8px;display:block;background:var(--line,#eee);min-height:120px"><label class="tiny" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" data-or="visual" checked> Include this concept in the email</label></div>`:o.visual_state==="pending"?`<div class="tiny faint" style="margin:0 0 8px">Concept image still saving…</div>`:o.visual_state==="failed"?`<div class="tiny" style="margin:0 0 8px;color:var(--flare)">Concept image didn't save; the email will go without it.</div>`:""}
     <label class="ob-f"><span>To</span><input data-or="email" value="${esc(o.email||"")}"></label>
     <label class="ob-f"><span>Cc</span><input value="${OR_CC}" disabled title="Sophie W is copied on every outreach email"></label>
     <label class="ob-f"><span>Subject</span><input data-or="subject" value="${esc(o.draft_subject||"")}"></label>
@@ -1155,6 +1157,12 @@ function orCard(o){
   </div>`;
 }
 function orVals(id){ const c=el("or-"+id); const g=f=>(c.querySelector('[data-or="'+f+'"]')||{}).value||""; return {email:g("email").trim(),subject:g("subject"),body:g("body")}; }
+function orVisualOn(id){ const c=el("or-"+id); const x=c&&c.querySelector('[data-or="visual"]'); return x?x.checked:false; }
+/* concept images live in a private bucket: fetch short-lived links after each render */
+async function orLoadVisuals(){
+  const imgs=[...document.querySelectorAll("img[data-or-vis]")].filter(i=>!i.src);
+  for(const i of imgs){ try{ const { data } = await sb.storage.from("outreach-visuals").createSignedUrl(i.dataset.orVis,3600); if(data&&data.signedUrl) i.src=data.signedUrl; }catch(e){} }
+}
 async function orSend(id,b){
   const o=(D.outr||[]).find(x=>x.id===id); if(!o) return;
   const v=orVals(id);
@@ -1171,16 +1179,15 @@ async function orSend(id,b){
   let res=null, why="";
   try{
     const tok=((await sb.auth.getSession()).data.session||{}).access_token||"";
-    const thread=o.draft_kind==="followup"&&o.gmail_thread&&!/^https?:/.test(o.gmail_thread)?o.gmail_thread:undefined;
-    const r=await fetch(SUPA_URL+"/functions/v1/desk",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
-      body:JSON.stringify({action:"gmail.send",to:[v.email],cc:[OR_CC],subject:v.subject,body:v.body,threadId:thread})});
+    const r=await fetch(SUPA_URL+"/functions/v1/outreach",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
+      body:JSON.stringify({action:"send",id,email:v.email,subject:v.subject,body:v.body,visual:orVisualOn(id)})});
     let data=null; try{ data=await r.json(); }catch(e){}
     if(data&&data.ok&&data.result&&data.result.messageId) res=data.result; else why=(data&&data.error)||("HTTP "+r.status);
   }catch(e){ why=e.message||String(e); }
   if(!res){ b.disabled=false; b.textContent="Send"; toast("Not sent: "+why); return; }
   const { error } = await sb.rpc("haus_outreach_sent",{p_id:id,p_message_id:res.messageId||"",p_thread_id:res.threadId||""});
   await loadAll(); render(); renderTabs();
-  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email+", Sophie W copied");
+  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email+(res.visual?" with the concept":"")+", Sophie W copied");
 }
 function plForm(r){
   r=r||{};
@@ -1279,6 +1286,7 @@ function render(){
     ? "Xero figures are as at " + d(s.as_of) + ". Project figures carry their own source and date."
     : "No finance snapshot has been loaded yet.";
   if(TAB==="meeting") wireClock();
+  if(TAB==="pipeline") orLoadVisuals();
 }
 
 /* ── shared bits ─────────────────────────────────────────────────────── */
