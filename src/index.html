@@ -1195,12 +1195,15 @@ async function orSend(id,b){
     const r=await fetch(SUPA_URL+"/functions/v1/outreach",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
       body:JSON.stringify({action:"send",id,email:v.email,subject:v.subject,body:v.body,visual:orVisualOn(id)})});
     let data=null; try{ data=await r.json(); }catch(e){}
-    if(data&&data.ok&&data.result&&data.result.messageId) res=data.result; else why=(data&&data.error)||("HTTP "+r.status);
+    const out=data&&(data.result||data);
+    if(data&&data.ok&&out&&out.messageId) res=out; else why=(data&&data.error)||("HTTP "+r.status);
   }catch(e){ why=e.message||String(e); }
   if(!res){ b.disabled=false; b.textContent="Send"; toast("Not sent: "+why); return; }
+  b.textContent="Sent";
   const { error } = await sb.rpc("haus_outreach_sent",{p_id:id,p_message_id:res.messageId||"",p_thread_id:res.threadId||""});
+  if(error){ toast("Sent to "+v.email+", but the board couldn't log it ("+error.message+"). Don't press Send again."); return; }
   await loadAll(); render(); renderTabs();
-  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email+(res.visual?" with the concept":"")+", Sophie W copied");
+  toast("Sent to "+v.email+(res.visual?" with the concept":"")+", Sophie W copied");
 }
 function plForm(r){
   r=r||{};
