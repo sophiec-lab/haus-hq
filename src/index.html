@@ -1153,7 +1153,7 @@ function orCard(o){
     <label class="ob-f"><span>Subject</span><input data-or="subject" value="${esc(o.draft_subject||"")}"></label>
     <textarea class="ob-body" data-or="body" rows="14" aria-label="Message">${esc(o.draft_body||"")}</textarea>
     <div class="ob-attach">${o.draft_reason?`<b>Check:</b> ${esc(o.draft_reason)} `:""}${o.email_source&&/^https?:/.test(o.email_source)?`<a href="${esc(o.email_source)}" target="_blank" rel="noopener">where the address came from</a>`:""}${ev?" · "+ev:""}</div>
-    <div class="ob-actions">${canSend?`<button class="btn primary" data-act="or-send" data-id="${o.id}">Send</button>`:`<span class="tiny">Sends from Sophie C's inbox, so Sophie C presses Send.</span>`}<button class="btn" data-act="or-save" data-id="${o.id}">Save edits</button><button class="btn" data-act="or-skip" data-id="${o.id}">Skip</button></div>
+    <div class="ob-actions">${canSend?`<button class="btn primary" data-act="or-send" data-id="${o.id}">Send</button>`:`<span class="tiny">Sends from Sophie C's inbox, so Sophie C presses Send.</span>`}${canSend?`<button class="btn" data-act="or-test" data-id="${o.id}">Send a test to me</button>`:""}<button class="btn" data-act="or-save" data-id="${o.id}">Save edits</button><button class="btn" data-act="or-skip" data-id="${o.id}">Skip</button></div>
   </div>`;
 }
 function orVals(id){ const c=el("or-"+id); const g=f=>(c.querySelector('[data-or="'+f+'"]')||{}).value||""; return {email:g("email").trim(),subject:g("subject"),body:g("body")}; }
@@ -1162,6 +1162,18 @@ function orVisualOn(id){ const c=el("or-"+id); const x=c&&c.querySelector('[data
 async function orLoadVisuals(){
   const imgs=[...document.querySelectorAll("img[data-or-vis]")].filter(i=>!i.src);
   for(const i of imgs){ try{ const { data } = await sb.storage.from("outreach-visuals").createSignedUrl(i.dataset.orVis,3600); if(data&&data.signedUrl) i.src=data.signedUrl; }catch(e){} }
+}
+async function orTest(id,b){
+  const v=orVals(id); b.disabled=true; const t=b.textContent; b.textContent="Sending test…";
+  let msg="";
+  try{
+    const tok=((await sb.auth.getSession()).data.session||{}).access_token||"";
+    const r=await fetch(SUPA_URL+"/functions/v1/outreach",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
+      body:JSON.stringify({action:"send",test:true,id,email:v.email,subject:v.subject,body:v.body,visual:orVisualOn(id)})});
+    let data=null; try{ data=await r.json(); }catch(e){}
+    msg=data&&data.ok?"Test sent to your inbox"+(data.visual?" with the concept":"")+". Nothing has gone to the prospect.":"Test failed: "+((data&&data.error)||("HTTP "+r.status));
+  }catch(e){ msg="Test failed: "+(e.message||e); }
+  b.disabled=false; b.textContent=t; toast(msg);
 }
 async function orSend(id,b){
   const o=(D.outr||[]).find(x=>x.id===id); if(!o) return;
@@ -5055,6 +5067,7 @@ document.addEventListener("click", async e=>{
     case "comp-done": await rpc("haus_save_compliance",{p_id:id,p_data:{status:"done"}},"Marked done"); break;
     case "cp-add": await rpc("haus_save_compliance",{p_id:null,p_data:{title:"New deadline"}},"Added"); break;
     case "or-send": await orSend(id,b); break;
+    case "or-test": await orTest(id,b); break;
     case "or-save": await rpc("haus_outreach_save",{p_id:id,p_data:orVals(id)},"Saved"); break;
     case "or-skip": if(confirm("Skip this one? It won't be sent.")) await rpc("haus_outreach_skip",{p_id:id},"Skipped"); break;
     case "or-pipe": await rpc("haus_outreach_to_pipeline",{p_id:id},"Added to the pipeline"); break;
