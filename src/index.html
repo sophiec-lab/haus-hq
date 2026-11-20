@@ -1099,7 +1099,7 @@ function vPipeline(){
   const sc={won:"good",lost:"bad",negotiation:"warn",proposal:"acc"};
   h+=`<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Client and opportunity</th><th class="r">Value</th><th>Stage</th><th>Owner</th><th>Next step</th><th></th></tr></thead><tbody>`
     + (rows.length? rows.map(r=>`<tr>
-      <td><b>${esc(r.client||"")}</b>${r.opportunity?`<div class="small">${esc(r.opportunity)}</div>`:""}${r.contact?`<div class="tiny faint">${esc(r.contact)}</div>`:""}${r.notes?`<div class="tiny muted" style="margin-top:4px">${esc(r.notes)}</div>`:""}</td>
+      <td><b>${esc(r.client||"")}</b>${r.opportunity?`<div class="small">${esc(r.opportunity)}</div>`:""}${r.contact?`<div class="tiny faint">${esc(r.contact)}</div>`:""}${r.deck_url&&/^https?:/.test(r.deck_url)?`<div class="small" style="margin-top:4px"><a href="${esc(r.deck_url)}" target="_blank" rel="noopener">${esc(r.deck_label||"Proposal deck")} &rarr;</a></div>`:""}${r.notes?`<div class="tiny muted" style="margin-top:4px">${esc(r.notes)}</div>`:""}</td>
       <td class="r num" style="white-space:nowrap">${r.value!=null&&r.value!==""?money(Number(r.value),r.ccy||"GBP"):`<span class="faint">not set</span>`}</td>
       <td style="white-space:nowrap"><span class="chip ${sc[r.stage]||""}">${esc(r.stage||"")}</span><div class="tiny faint">${r.probability!=null?esc(r.probability)+"%":""}${r.expected_close?" &middot; close "+dshort(r.expected_close):""}</div></td>
       <td class="small">${esc(r.owner||"")}</td>
@@ -1219,6 +1219,8 @@ function plForm(r){
     {k:"owner",label:"Owner",required:false,value:r.id?(r.owner||""):(ME&&ME.full_name||"").split(" ")[0]},
     {k:"next_step",label:"Next step",required:false,value:r.next_step||""},
     {k:"next_step_due",label:"Next step by",type:"date",required:false,value:r.next_step_due||""},
+    {k:"deck_url",label:"Proposal deck link",required:false,value:r.deck_url||"",placeholder:"Canva or Drive link"},
+    {k:"deck_label",label:"Deck link text",required:false,value:r.deck_label||"",placeholder:"e.g. N1 proposal deck"},
     {k:"notes",label:"Notes",type:"textarea",required:false,value:r.notes||""}
   ];
 }
