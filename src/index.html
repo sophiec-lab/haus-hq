@@ -1113,6 +1113,7 @@ function vPipeline(){
 const OR_SEG={event_owner:"Event owner",stand_agency:"Stand agency",exhibitor:"Exhibitor",co_host:"Co-host"};
 const OR_STAGE={drafted:["Drafted",""],sent:["Sent","acc"],followed_up:["Followed up","acc"],replied:["Replied","good"],meeting:["In pipeline","good"],won:["Won","good"],lost:["Lost","bad"],skipped:["Skipped",""],do_not_contact:["Do not contact","bad"],bounced:["Bounced","bad"]};
 let OR_SEND_CONFIRM=null;
+const OR_CC="sophie.w@haus-events.co.uk";
 function outreachBlock(){
   const all=D.outr||[];
   const ready=all.filter(o=>o.draft_kind&&o.draft_body).sort((a,b)=>(a.draft_kind==="followup"?0:1)-(b.draft_kind==="followup"?0:1)||String(a.draft_at).localeCompare(String(b.draft_at)));
@@ -1122,7 +1123,7 @@ function outreachBlock(){
   const sent30=sentAll.filter(o=>o.sent_at>=cut);
   const rate=sentAll.length?Math.round(replied.length/sentAll.length*100)+"%":"&mdash;";
   let h=`<h2 class="sec">New business outreach <span class="aside">${ready.length} ready to send</span></h2>`;
-  h+=`<p class="ob-hint">Every weekday morning Claude finds new prospects (event owners, stand agencies, exhibitors and co-host partners), researches a real reason to write, and drafts the email here. Nothing goes until you press <b>Send</b>; it sends from Sophie C's inbox. Skip anything that isn't right. Follow-ups are drafted six days after a send if there's no reply, and replies show below.</p>`;
+  h+=`<p class="ob-hint">Every weekday morning Claude finds new prospects (event owners, stand agencies, exhibitors and co-host partners), researches a real reason to write, and drafts the email here. Nothing goes until you press <b>Send</b>; it sends from Sophie C's inbox with Sophie W copied in. Skip anything that isn't right. Follow-ups are drafted six days after a send if there's no reply, and replies show below.</p>`;
   h+=`<div class="tiles">`+tile("Ready to send",num(ready.length),ready.filter(o=>o.draft_kind==="followup").length+" follow-ups",ready.length?"warn":"")
     +tile("Sent, last 30 days",num(sent30.length),num(sentAll.length)+" all time")
     +tile("Replies",num(replied.length),"reply rate "+rate,replied.length?"good":"")
@@ -1146,6 +1147,7 @@ function orCard(o){
     <div class="ob-head"><span class="chip ${fu?"warn":"acc"}">${fu?"Follow-up":OR_SEG[o.segment]||"Outreach"}</span><b>${esc(o.company)}</b><span class="small">${esc([o.person,o.role].filter(Boolean).join(", "))}</span>${o.warm?`<span class="chip good">knows you</span>`:""}<span class="tiny faint">drafted ${o.draft_at?d(String(o.draft_at).slice(0,10)):""}</span></div>
     ${o.hook?`<div class="small muted" style="margin:6px 0 8px">${esc(o.hook)}</div>`:""}
     <label class="ob-f"><span>To</span><input data-or="email" value="${esc(o.email||"")}"></label>
+    <label class="ob-f"><span>Cc</span><input value="${OR_CC}" disabled title="Sophie W is copied on every outreach email"></label>
     <label class="ob-f"><span>Subject</span><input data-or="subject" value="${esc(o.draft_subject||"")}"></label>
     <textarea class="ob-body" data-or="body" rows="14" aria-label="Message">${esc(o.draft_body||"")}</textarea>
     <div class="ob-attach">${o.draft_reason?`<b>Check:</b> ${esc(o.draft_reason)} `:""}${o.email_source&&/^https?:/.test(o.email_source)?`<a href="${esc(o.email_source)}" target="_blank" rel="noopener">where the address came from</a>`:""}${ev?" · "+ev:""}</div>
@@ -1171,14 +1173,14 @@ async function orSend(id,b){
     const tok=((await sb.auth.getSession()).data.session||{}).access_token||"";
     const thread=o.draft_kind==="followup"&&o.gmail_thread&&!/^https?:/.test(o.gmail_thread)?o.gmail_thread:undefined;
     const r=await fetch(SUPA_URL+"/functions/v1/desk",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
-      body:JSON.stringify({action:"gmail.send",to:[v.email],subject:v.subject,body:v.body,threadId:thread})});
+      body:JSON.stringify({action:"gmail.send",to:[v.email],cc:[OR_CC],subject:v.subject,body:v.body,threadId:thread})});
     let data=null; try{ data=await r.json(); }catch(e){}
     if(data&&data.ok&&data.result&&data.result.messageId) res=data.result; else why=(data&&data.error)||("HTTP "+r.status);
   }catch(e){ why=e.message||String(e); }
   if(!res){ b.disabled=false; b.textContent="Send"; toast("Not sent: "+why); return; }
   const { error } = await sb.rpc("haus_outreach_sent",{p_id:id,p_message_id:res.messageId||"",p_thread_id:res.threadId||""});
   await loadAll(); render(); renderTabs();
-  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email);
+  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email+", Sophie W copied");
 }
 function plForm(r){
   r=r||{};
