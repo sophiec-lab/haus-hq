@@ -763,6 +763,7 @@ const SOURCES = [
   ["docs","haus_documents","created_at"],
   ["comp","haus_compliance","due_date"],
   ["pipe","haus_pipeline","expected_close"],
+  ["outr","haus_outreach","created_at"],
   ["outbox","haus_outbox","created_at"],
   ["ci","haus_contractor_invoices","bill_date"],
   ["wmMeetings","haus_wm_meetings","week_commencing"],
@@ -776,7 +777,7 @@ const SOURCES = [
   ["dirOut","haus_director_money_out","txn_date"]
 ];
 
-const SRC_LABEL = {projects:"Projects",pdates:"Project dates",pupdates:"Project updates",pfinance:"Project finance",invoices:"Xero invoices",bills:"Xero bills",subs:"Subscriptions",snap:"Xero balance sheet",pnl:"Xero profit and loss",people:"People",contracts:"Contracts",staffMonths:"Staff costs",staffTotals:"Staff costs",staffRates:"Staff rates",staffPlan:"Staff plan",payroll:"Payroll run",staffAlloc:"Staff allocation",staffByPerson:"Staff costs",bank:"Bank statements",bankCash:"Bank balances",bankWeekly:"Bank statements",bankParty:"Spend by supplier",bankCard:"Card spend",bankFresh:"Bank statements",bankFY:"Bank statements",holidays:"Holidays",allowance:"Holiday allowances",meetings:"Meetings",issues:"Issues",todos:"To-dos",headlines:"Headlines",ratings:"Meetings",scorecard:"Scorecard",rocks:"Rocks",leadership:"Leadership",issuesData:"Data checks",links:"Links",members:"Access",renewals:"Renewals",docs:"Documents",comp:"Deadlines",pipe:"Pipeline",outbox:"Outbox",ci:"Contractor invoices",wmMeetings:"Weekly meeting",wmIntro:"Weekly meeting",wmProjects:"Weekly meeting",wmDepts:"Weekly meeting",wmIssues:"Weekly meeting",wmMgmt:"Weekly meeting",wmHomework:"Weekly meeting",dirSpend:"Directors\u2019 spend",dirOut:"Money out",orders:"Card orders",poReceipts:"Card receipts",poCard:"Card spend"};
+const SRC_LABEL = {projects:"Projects",pdates:"Project dates",pupdates:"Project updates",pfinance:"Project finance",invoices:"Xero invoices",bills:"Xero bills",subs:"Subscriptions",snap:"Xero balance sheet",pnl:"Xero profit and loss",people:"People",contracts:"Contracts",staffMonths:"Staff costs",staffTotals:"Staff costs",staffRates:"Staff rates",staffPlan:"Staff plan",payroll:"Payroll run",staffAlloc:"Staff allocation",staffByPerson:"Staff costs",bank:"Bank statements",bankCash:"Bank balances",bankWeekly:"Bank statements",bankParty:"Spend by supplier",bankCard:"Card spend",bankFresh:"Bank statements",bankFY:"Bank statements",holidays:"Holidays",allowance:"Holiday allowances",meetings:"Meetings",issues:"Issues",todos:"To-dos",headlines:"Headlines",ratings:"Meetings",scorecard:"Scorecard",rocks:"Rocks",leadership:"Leadership",issuesData:"Data checks",links:"Links",members:"Access",renewals:"Renewals",docs:"Documents",comp:"Deadlines",pipe:"Pipeline",outr:"Outreach",outbox:"Outbox",ci:"Contractor invoices",wmMeetings:"Weekly meeting",wmIntro:"Weekly meeting",wmProjects:"Weekly meeting",wmDepts:"Weekly meeting",wmIssues:"Weekly meeting",wmMgmt:"Weekly meeting",wmHomework:"Weekly meeting",dirSpend:"Directors\u2019 spend",dirOut:"Money out",orders:"Card orders",poReceipts:"Card receipts",poCard:"Card spend"};
 let LOADER_AT = 0;
 function showLoader(title, slim){
   const L = el("loader"); if(!L) return;
@@ -1092,6 +1093,7 @@ function vPipeline(){
   const open=rows.filter(r=>!["won","lost"].includes(r.stage)), won=rows.filter(r=>r.stage==="won");
   const byC=(arr,f)=>{ const o={}; arr.forEach(r=>{ const c=r.ccy||"GBP"; o[c]=(o[c]||0)+f(r); }); const s=Object.entries(o).filter(([,v])=>v).map(([c,v])=>money(v,c)).join(" + "); return s||"&mdash;"; };
   let h=`<h2 class="sec">Pipeline <span class="aside">HAUS's own new business</span><button class="btn primary" data-act="pl-add">Add lead</button></h2>`;
+  h=outreachBlock()+h;
   h+=`<div class="tiles">`+tile("Open opportunities",num(open.length),"lead to negotiation")+tile("Open value",byC(open,r=>Number(r.value)||0),"face value")
     +tile("Weighted value",byC(open,r=>(Number(r.value)||0)*(Number(r.probability)||0)/100),"value × probability")+tile("Won",byC(won,r=>Number(r.value)||0),won.length+(won.length===1?" deal":" deals"), won.length?"good":"")+`</div>`;
   const sc={won:"good",lost:"bad",negotiation:"warn",proposal:"acc"};
@@ -1106,6 +1108,77 @@ function vPipeline(){
       : `<tr><td colspan="6" class="empty">No leads yet. Add proposals and enquiries as they come in.</td></tr>`)
     + `</tbody></table></div>`;
   return h;
+}
+/* ── outreach engine: Claude researches and drafts, a director sends ── */
+const OR_SEG={event_owner:"Event owner",stand_agency:"Stand agency",exhibitor:"Exhibitor",co_host:"Co-host"};
+const OR_STAGE={drafted:["Drafted",""],sent:["Sent","acc"],followed_up:["Followed up","acc"],replied:["Replied","good"],meeting:["In pipeline","good"],won:["Won","good"],lost:["Lost","bad"],skipped:["Skipped",""],do_not_contact:["Do not contact","bad"],bounced:["Bounced","bad"]};
+let OR_SEND_CONFIRM=null;
+function outreachBlock(){
+  const all=D.outr||[];
+  const ready=all.filter(o=>o.draft_kind&&o.draft_body).sort((a,b)=>(a.draft_kind==="followup"?0:1)-(b.draft_kind==="followup"?0:1)||String(a.draft_at).localeCompare(String(b.draft_at)));
+  const sentAll=all.filter(o=>o.sent_at);
+  const replied=all.filter(o=>["replied","meeting","won","lost"].includes(o.stage)||o.replied_at);
+  const cut=new Date(Date.now()-30*864e5).toISOString();
+  const sent30=sentAll.filter(o=>o.sent_at>=cut);
+  const rate=sentAll.length?Math.round(replied.length/sentAll.length*100)+"%":"&mdash;";
+  let h=`<h2 class="sec">New business outreach <span class="aside">${ready.length} ready to send</span></h2>`;
+  h+=`<p class="ob-hint">Every weekday morning Claude finds new prospects (event owners, stand agencies, exhibitors and co-host partners), researches a real reason to write, and drafts the email here. Nothing goes until you press <b>Send</b>; it sends from Sophie C's inbox. Skip anything that isn't right. Follow-ups are drafted six days after a send if there's no reply, and replies show below.</p>`;
+  h+=`<div class="tiles">`+tile("Ready to send",num(ready.length),ready.filter(o=>o.draft_kind==="followup").length+" follow-ups",ready.length?"warn":"")
+    +tile("Sent, last 30 days",num(sent30.length),num(sentAll.length)+" all time")
+    +tile("Replies",num(replied.length),"reply rate "+rate,replied.length?"good":"")
+    +tile("In pipeline",num(all.filter(o=>o.pipeline_id).length),"leads from outreach")+`</div>`;
+  h+=ready.length?ready.map(orCard).join(""):`<div class="ob-empty">Nothing waiting. Today's drafts land here after the morning run.</div>`;
+  const log=all.filter(o=>!o.draft_kind&&o.stage!=="drafted").sort((a,b)=>String(b.replied_at||b.last_touch_at||b.updated_at).localeCompare(String(a.replied_at||a.last_touch_at||a.updated_at))).slice(0,40);
+  if(log.length) h+=`<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Prospect</th><th>Type</th><th>Stage</th><th>Sent</th><th>Reply</th><th></th></tr></thead><tbody>`
+    +log.map(o=>{ const st=OR_STAGE[o.stage]||[o.stage,""]; return `<tr><td><b>${esc(o.company)}</b><div class="tiny faint">${esc([o.person,o.email].filter(Boolean).join(" · "))}</div></td>
+      <td class="small">${esc(OR_SEG[o.segment]||o.segment)}</td><td><span class="chip ${st[1]}">${esc(st[0])}</span>${o.touches>1?`<div class="tiny faint">${o.touches} emails</div>`:""}</td>
+      <td class="small" style="white-space:nowrap">${o.sent_at?dshort(o.sent_at.slice(0,10)):"&mdash;"}${o.sent_by?`<div class="tiny faint">${esc(o.sent_by)}</div>`:""}</td>
+      <td class="small">${o.reply_summary?esc(o.reply_summary):""}${o.gmail_thread&&/^https?:/.test(o.gmail_thread)?` <a href="${esc(o.gmail_thread)}" target="_blank" rel="noopener">thread</a>`:""}</td>
+      <td style="white-space:nowrap">${o.stage==="replied"&&!o.pipeline_id?`<button class="btn small" data-act="or-pipe" data-id="${o.id}">Add to pipeline</button>`:""}</td></tr>`; }).join("")
+    +`</tbody></table></div>`;
+  return h+`<div style="height:28px"></div>`;
+}
+function orCard(o){
+  const fu=o.draft_kind==="followup";
+  const ev=(o.evidence||[]).filter(e=>e&&e.url).map((e,i)=>`<a href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(e.fact||"")}">source ${i+1}</a>`).join(" · ");
+  const canSend=poCanSend();
+  return `<div class="ob-card" id="or-${o.id}">
+    <div class="ob-head"><span class="chip ${fu?"warn":"acc"}">${fu?"Follow-up":OR_SEG[o.segment]||"Outreach"}</span><b>${esc(o.company)}</b><span class="small">${esc([o.person,o.role].filter(Boolean).join(", "))}</span>${o.warm?`<span class="chip good">knows you</span>`:""}<span class="tiny faint">drafted ${o.draft_at?d(String(o.draft_at).slice(0,10)):""}</span></div>
+    ${o.hook?`<div class="small muted" style="margin:6px 0 8px">${esc(o.hook)}</div>`:""}
+    <label class="ob-f"><span>To</span><input data-or="email" value="${esc(o.email||"")}"></label>
+    <label class="ob-f"><span>Subject</span><input data-or="subject" value="${esc(o.draft_subject||"")}"></label>
+    <textarea class="ob-body" data-or="body" rows="14" aria-label="Message">${esc(o.draft_body||"")}</textarea>
+    <div class="ob-attach">${o.draft_reason?`<b>Check:</b> ${esc(o.draft_reason)} `:""}${o.email_source&&/^https?:/.test(o.email_source)?`<a href="${esc(o.email_source)}" target="_blank" rel="noopener">where the address came from</a>`:""}${ev?" · "+ev:""}</div>
+    <div class="ob-actions">${canSend?`<button class="btn primary" data-act="or-send" data-id="${o.id}">Send</button>`:`<span class="tiny">Sends from Sophie C's inbox, so Sophie C presses Send.</span>`}<button class="btn" data-act="or-save" data-id="${o.id}">Save edits</button><button class="btn" data-act="or-skip" data-id="${o.id}">Skip</button></div>
+  </div>`;
+}
+function orVals(id){ const c=el("or-"+id); const g=f=>(c.querySelector('[data-or="'+f+'"]')||{}).value||""; return {email:g("email").trim(),subject:g("subject"),body:g("body")}; }
+async function orSend(id,b){
+  const o=(D.outr||[]).find(x=>x.id===id); if(!o) return;
+  const v=orVals(id);
+  if(!/^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(v.email)){ toast("Check the email address"); return; }
+  if(/[–—]/.test(v.subject+v.body)){ toast("There's a dash in the email; swap it for a comma or full stop first"); return; }
+  if(OR_SEND_CONFIRM!==id){
+    OR_SEND_CONFIRM=id; b.textContent="Confirm: send to "+v.email;
+    setTimeout(()=>{ if(OR_SEND_CONFIRM===id){ OR_SEND_CONFIRM=null; const b2=document.querySelector(`[data-act="or-send"][data-id="${id}"]`); if(b2) b2.textContent="Send"; } },8000);
+    return;
+  }
+  OR_SEND_CONFIRM=null; b.disabled=true; b.textContent="Sending…";
+  const sv=await sb.rpc("haus_outreach_save",{p_id:id,p_data:v});
+  if(sv.error){ b.disabled=false; b.textContent="Send"; toast("Not sent: "+sv.error.message); return; }
+  let res=null, why="";
+  try{
+    const tok=((await sb.auth.getSession()).data.session||{}).access_token||"";
+    const thread=o.draft_kind==="followup"&&o.gmail_thread&&!/^https?:/.test(o.gmail_thread)?o.gmail_thread:undefined;
+    const r=await fetch(SUPA_URL+"/functions/v1/desk",{method:"POST",headers:{"authorization":"Bearer "+tok,"content-type":"application/json"},
+      body:JSON.stringify({action:"gmail.send",to:[v.email],subject:v.subject,body:v.body,threadId:thread})});
+    let data=null; try{ data=await r.json(); }catch(e){}
+    if(data&&data.ok&&data.result&&data.result.messageId) res=data.result; else why=(data&&data.error)||("HTTP "+r.status);
+  }catch(e){ why=e.message||String(e); }
+  if(!res){ b.disabled=false; b.textContent="Send"; toast("Not sent: "+why); return; }
+  const { error } = await sb.rpc("haus_outreach_sent",{p_id:id,p_message_id:res.messageId||"",p_thread_id:res.threadId||""});
+  await loadAll(); render(); renderTabs();
+  toast(error?"Sent, but not logged: "+error.message:"Sent to "+v.email);
 }
 function plForm(r){
   r=r||{};
@@ -4971,6 +5044,10 @@ document.addEventListener("click", async e=>{
     case "go": closeDrawer(); TAB=b.dataset.tab; location.hash=TAB; renderTabs(); render(); window.scrollTo(0,0); break;
     case "comp-done": await rpc("haus_save_compliance",{p_id:id,p_data:{status:"done"}},"Marked done"); break;
     case "cp-add": await rpc("haus_save_compliance",{p_id:null,p_data:{title:"New deadline"}},"Added"); break;
+    case "or-send": await orSend(id,b); break;
+    case "or-save": await rpc("haus_outreach_save",{p_id:id,p_data:orVals(id)},"Saved"); break;
+    case "or-skip": if(confirm("Skip this one? It won't be sent.")) await rpc("haus_outreach_skip",{p_id:id},"Skipped"); break;
+    case "or-pipe": await rpc("haus_outreach_to_pipeline",{p_id:id},"Added to the pipeline"); break;
     case "pl-add": { const fr=await formAsk("Add lead",plForm(null),"Add"); if(fr) await rpc("haus_save_pipeline",{p_id:null,p_data:plData(fr)},"Added"); break; }
     case "pl-edit": { const r=(D.pipe||[]).find(x=>x.id===id); if(!r) break; const fr=await formAsk("Edit "+(r.client||"lead"),plForm(r),"Save");
       if(fr){ if(fr.stage!==r.stage && String(fr.probability)===String(r.probability??"")) fr.probability=""; await rpc("haus_save_pipeline",{p_id:id,p_data:plData(fr)},"Saved"); } break; }
