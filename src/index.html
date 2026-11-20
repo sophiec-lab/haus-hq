@@ -1143,14 +1143,14 @@ function outreachBlock(){
       <td class="small">${esc(OR_SEG[o.segment]||o.segment)}</td><td><span class="chip ${st[1]}">${esc(st[0])}</span>${o.touches>1?`<div class="tiny faint">${o.touches} emails</div>`:""}${o.followup_due&&["sent","followed_up"].includes(o.stage)?`<div class="tiny faint">follow up ${dshort(o.followup_due)}</div>`:""}</td>
       <td class="small" style="white-space:nowrap">${o.sent_at?dshort(o.sent_at.slice(0,10)):"&mdash;"}${o.sent_by?`<div class="tiny faint">${esc(o.sent_by)}</div>`:""}</td>
       <td class="small">${o.reply_summary?esc(o.reply_summary):""}${o.gmail_thread&&/^https?:/.test(o.gmail_thread)?` <a href="${esc(o.gmail_thread)}" target="_blank" rel="noopener">thread</a>`:""}</td>
-      <td style="white-space:nowrap;display:flex;flex-direction:column;gap:6px;align-items:flex-end">${o.stage==="replied"||o.replied_at?`<button class="btn small${orNeedsReply(o)?" primary":""}" data-act="or-reply" data-id="${o.id}">${OR_OPEN.has(o.id)||orNeedsReply(o)?"Replying":"Reply"}</button>`:""}${o.stage==="replied"&&!o.pipeline_id?`<button class="btn small" data-act="or-pipe" data-id="${o.id}">Add to pipeline</button>`:""}</td></tr>`; }).join("")
+      <td style="white-space:nowrap;display:flex;flex-direction:column;gap:6px;align-items:flex-end">${o.stage==="replied"||o.stage==="meeting"||o.replied_at?`<button class="btn small${orNeedsReply(o)?" primary":""}" data-act="or-reply" data-id="${o.id}">${OR_OPEN.has(o.id)||orNeedsReply(o)?"Replying":"Reply"}</button>`:""}${o.stage==="replied"&&!o.pipeline_id?`<button class="btn small" data-act="or-pipe" data-id="${o.id}">Add to pipeline</button>`:""}</td></tr>`; }).join("")
     +`</tbody></table></div>`;
   return h+`<div style="height:28px"></div>`;
 }
 const OR_OPEN=new Set(); let OR_REPLY_CONFIRM=null;
 const OR_CH={email:"Email",linkedin:"LinkedIn",whatsapp:"WhatsApp"};
 function orChannel(o){ return o.reply_channel||(o.email&&!/^LinkedIn/.test(o.sent_by||"")?"email":/WhatsApp/i.test(o.sent_by||"")?"whatsapp":"linkedin"); }
-function orNeedsReply(o){ if(o.stage!=="replied") return false; const c=o.conversation||[]; const last=c[c.length-1]; return last?last.from==="them":!o.last_reply_sent_at; }
+function orNeedsReply(o){ if(!["replied","meeting"].includes(o.stage)) return false; const c=o.conversation||[]; const last=c[c.length-1]; return last?last.from==="them":!o.last_reply_sent_at; }
 function orReplyCard(o){
   const ch=orChannel(o); const conv=(o.conversation||[]).slice();
   if(!conv.length&&o.reply_text) conv.push({from:"them",by:o.person,channel:ch,at:o.replied_at,text:o.reply_text});
